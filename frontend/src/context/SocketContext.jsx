@@ -11,8 +11,10 @@ export const SocketProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
+    const backendSocketUrl = import.meta.env.VITE_SOCKET_URL || 'https://community-hub-project-1.onrender.com';
+    
     // Initialize socket connection to backend
-    const socketInstance = io(window.location.origin, {
+    const socketInstance = io(backendSocketUrl, {
       reconnectionAttempts: 5,
       timeout: 10000
     });
