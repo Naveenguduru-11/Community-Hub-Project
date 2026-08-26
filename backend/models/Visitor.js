@@ -9,8 +9,8 @@ const visitorSchema = new mongoose.Schema({
     default: 'GUEST' 
   },
   company: { type: String, default: '' }, // e.g. Amazon, Swiggy, Uber
-  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: true },
-  villa: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa', required: true },
+  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: false },
+  villa: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa', required: false },
   hostResident: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   passcode: { type: String, required: true }, // 6-digit access code
   qrCodeUrl: { type: String, default: '' },

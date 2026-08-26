@@ -217,3 +217,12 @@ const seed = async () => {
 };
 
 module.exports = seed;
+
+if (require.main === module) {
+  const connectDB = require('../config/db');
+  connectDB().then(async () => {
+    await seed();
+    process.exit(0);
+  });
+}
+

@@ -11,6 +11,9 @@ const userSchema = new mongoose.Schema({
     enum: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT', 'SECURITY_GUARD'], 
     default: 'RESIDENT' 
   },
+  buildingBlock: { type: String, default: 'Building A' },
+  floorNumber: { type: String, default: '1st Floor' },
+  villaNumber: { type: String, default: 'Flat 101' },
   community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community' },
   villa: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa' },
   avatar: { type: String, default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80' },

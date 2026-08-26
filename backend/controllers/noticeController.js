@@ -8,6 +8,7 @@ exports.clearMemoryNotices = () => {
   memoryNotices = [];
 };
 
+
 exports.createNotice = async (req, res, next) => {
   try {
     const { title, content, category, priority } = req.body;
@@ -51,9 +52,11 @@ exports.getNotices = async (req, res, next) => {
 
     if (isConnected) {
       const notices = await Notice.find().populate('author', 'name role').sort({ createdAt: -1 });
-      return res.status(200).json({ success: true, count: notices.length, notices });
+      const uniqueNotices = Array.from(new Map(notices.map(item => [item._id.toString(), item])).values());
+      return res.status(200).json({ success: true, count: uniqueNotices.length, notices: uniqueNotices });
     } else {
-      return res.status(200).json({ success: true, count: memoryNotices.length, notices: memoryNotices });
+      const uniqueNotices = Array.from(new Map(memoryNotices.map(item => [item._id, item])).values());
+      return res.status(200).json({ success: true, count: uniqueNotices.length, notices: uniqueNotices });
     }
   } catch (error) {
     next(error);

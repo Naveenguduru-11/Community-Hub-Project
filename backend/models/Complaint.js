@@ -15,8 +15,9 @@ const complaintSchema = new mongoose.Schema({
     default: 'OPEN' 
   },
   raisedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  villa: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa', required: true },
-  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: true },
+  villa: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa', required: false },
+  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: false },
+  villaNumber: { type: String, default: 'Villa 101' },
   assignedTo: { type: String, default: 'Maintenance Team' },
   imageUrl: { type: String, default: '' },
   resolutionNotes: { type: String, default: '' },

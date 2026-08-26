@@ -9,19 +9,33 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted) setLoading(false);
+    }, 2500);
+
     if (token) {
       authService.getMe()
         .then(res => {
-          setUser(res.data.user);
+          if (isMounted) setUser(res.data.user);
         })
         .catch(err => {
           console.error('Session restore failed:', err);
-          logout();
+          if (isMounted) logout();
         })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (isMounted) setLoading(false);
+          clearTimeout(timer);
+        });
     } else {
       setLoading(false);
+      clearTimeout(timer);
     }
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, [token]);
 
   const login = async (email, password) => {

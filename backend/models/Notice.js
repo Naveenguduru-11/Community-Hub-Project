@@ -9,7 +9,7 @@ const noticeSchema = new mongoose.Schema({
     default: 'GENERAL' 
   },
   priority: { type: String, enum: ['NORMAL', 'IMPORTANT', 'CRITICAL'], default: 'NORMAL' },
-  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: true },
+  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: false },
   author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   attachmentUrl: { type: String, default: '' },
   expiresAt: Date

@@ -14,22 +14,25 @@ export const SuperAdminDashboard = () => {
     maintenanceMonthlyRate: 4500
   });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     try {
       const [cRes, sRes] = await Promise.all([
         communityService.getCommunities(),
         analyticsService.getStats()
       ]);
-      setCommunities(cRes.data.communities);
-      setStats(sRes.data.stats);
+      const rawCommunities = cRes.data.communities || [];
+      setCommunities(Array.from(new Map(rawCommunities.map(c => [c.code || c._id, c])).values()));
+      setStats(sRes.data.stats || {});
     } catch (err) {
       console.error('Failed to fetch super admin data:', err);
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleCreateCommunity = async (e) => {
     e.preventDefault();
@@ -47,19 +50,19 @@ export const SuperAdminDashboard = () => {
     <div className="space-y-6">
       
       {/* Banner */}
-      <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-purple-800">
+      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-emerald-800">
         <div>
-          <div className="inline-flex items-center gap-2 bg-purple-500/20 text-purple-300 text-xs px-3 py-1 rounded-full font-bold mb-2">
-            <Shield className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-300 text-xs px-3 py-1 rounded-full font-bold mb-2">
+            <Shield className="w-3.5 h-3.5 text-amber-400" />
             <span>Platform Super Admin Portal</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold">CommunityHub SaaS Platform Overview</h1>
-          <p className="text-xs sm:text-sm text-purple-200 mt-1">Multi-tenant management across all registered gated communities & villa associations.</p>
+          <p className="text-xs sm:text-sm text-emerald-100 mt-1">Multi-tenant management across all registered gated communities & villa associations.</p>
         </div>
 
         <button
           onClick={() => setShowModal(true)}
-          className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-500/25 flex items-center gap-2"
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-900/30 flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
           <span>+ Onboard New Community</span>

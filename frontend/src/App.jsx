@@ -75,6 +75,9 @@ const AppLayout = () => {
         <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden">
           <Routes>
             <Route path="/" element={<MainDashboardRouter />} />
+            <Route path="/security" element={<GuardDashboard />} />
+            <Route path="/guard" element={<GuardDashboard />} />
+            <Route path="/gate-security" element={<GuardDashboard />} />
             <Route path="/residents-directory" element={<ResidentDirectoryPage />} />
             <Route path="/visitors" element={<VisitorsPage />} />
             <Route path="/complaints" element={<ComplaintsPage />} />

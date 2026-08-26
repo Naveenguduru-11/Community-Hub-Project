@@ -13,21 +13,21 @@ export const GuardDashboard = () => {
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const { triggerSOS } = useSocket();
 
-  useEffect(() => {
-    fetchVisitors();
-  }, []);
-
   const fetchVisitors = async () => {
     setLoading(true);
     try {
       const res = await visitorService.getVisitors();
-      setVisitors(res.data.visitors);
+      setVisitors(res.data.visitors || []);
     } catch (err) {
       console.error('Failed to fetch gate logs:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchVisitors();
+  }, []);
 
   const handleCheckout = async (visitorId) => {
     if (confirm('Confirm visitor exit check-out?')) {

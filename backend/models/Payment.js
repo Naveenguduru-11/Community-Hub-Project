@@ -20,7 +20,8 @@ const paymentSchema = new mongoose.Schema({
   razorpayOrderId: { type: String, default: '' },
   razorpayPaymentId: { type: String, default: '' },
   razorpaySignature: { type: String, default: '' },
-  receiptNumber: { type: String, required: true, unique: true }
+  receiptNumber: { type: String, required: true, unique: true },
+  adminNotes: { type: String, default: '' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Payment', paymentSchema);

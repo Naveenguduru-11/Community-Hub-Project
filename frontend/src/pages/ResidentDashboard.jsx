@@ -23,10 +23,6 @@ export const ResidentDashboard = () => {
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
 
-  useEffect(() => {
-    fetchResidentData();
-  }, []);
-
   const fetchResidentData = async () => {
     setLoading(true);
     try {
@@ -37,17 +33,27 @@ export const ResidentDashboard = () => {
         noticeService.getNotices(),
         eventService.getEvents()
       ]);
-      setVisitors(vRes.data.visitors);
-      setPayments(pRes.data.payments);
-      setComplaints(cRes.data.complaints);
-      setNotices(nRes.data.notices);
-      setEvents(eRes.data.events);
+      const rawVisitors = vRes.data.visitors || [];
+      const rawPayments = pRes.data.payments || [];
+      const rawComplaints = cRes.data.complaints || [];
+      const rawNotices = nRes.data.notices || [];
+      const rawEvents = eRes.data.events || [];
+
+      setVisitors(Array.from(new Map(rawVisitors.map(v => [v.passcode || v._id, v])).values()));
+      setPayments(Array.from(new Map(rawPayments.map(p => [p.receiptNumber || p._id, p])).values()));
+      setComplaints(Array.from(new Map(rawComplaints.map(c => [c._id || c.title, c])).values()));
+      setNotices(Array.from(new Map(rawNotices.map(n => [n._id || n.title, n])).values()));
+      setEvents(Array.from(new Map(rawEvents.map(e => [e._id || e.title, e])).values()));
     } catch (err) {
-      console.error('Error fetching resident dashboard:', err);
+      console.error('Failed to load resident dashboard:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchResidentData();
+  }, []);
 
   const handleDeleteVisitor = async (id, name) => {
     if (confirm(`Cancel and delete guest pass for ${name}?`)) {
@@ -76,16 +82,16 @@ export const ResidentDashboard = () => {
   return (
     <div className="space-y-6">
       
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+      {/* Executive Emerald Welcome Banner */}
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-emerald-700/50 relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold mb-2">
+            <div className="inline-flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/30 px-3 py-1 rounded-full text-xs font-semibold mb-2 text-emerald-200">
               <Home className="w-3.5 h-3.5" />
-              <span>Villa {user?.villa?.villaNumber || 'V-101'} • {user?.villa?.block || 'Royal Palms'}</span>
+              <span>Villa {user?.villa?.villaNumber || user?.villaNumber || 'V-101'} • {user?.buildingBlock || 'Royal Palms'}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold">Welcome, {user?.name}!</h1>
-            <p className="text-blue-100 text-xs sm:text-sm mt-1 max-w-xl">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white">Welcome, {user?.name}!</h1>
+            <p className="text-emerald-100 text-xs sm:text-sm mt-1 max-w-xl">
               Manage your guest passes, pay maintenance, raise helpdesk tickets, and check community notices all in real-time.
             </p>
           </div>
@@ -93,7 +99,7 @@ export const ResidentDashboard = () => {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setShowVisitorModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white text-blue-600 hover:bg-blue-50 font-bold text-xs rounded-xl shadow-lg transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-900/30 transition-all"
             >
               <QrCode className="w-4 h-4" />
               <span>+ Pre-Approve Guest Pass</span>
@@ -101,7 +107,7 @@ export const ResidentDashboard = () => {
             
             <button
               onClick={() => setShowComplaintModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-700/80 hover:bg-blue-700 text-white font-bold text-xs rounded-xl backdrop-blur-md border border-white/20 transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/20 transition-all"
             >
               <AlertCircle className="w-4 h-4" />
               <span>+ Raise Ticket</span>

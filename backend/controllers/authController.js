@@ -2,64 +2,19 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
-const ID_SUPERADMIN = '65f1a2b3c4d5e6f7a8b9c001';
-const ID_ADMIN = '65f1a2b3c4d5e6f7a8b9c002';
-const ID_RESIDENT1 = '65f1a2b3c4d5e6f7a8b9c003';
-const ID_GUARD = '65f1a2b3c4d5e6f7a8b9c004';
+// In-Memory User Cache (Starts Completely Empty - 100% Fresh Website)
+let memoryUsers = [];
 
-// In-Memory User Cache
-let memoryUsers = [
-  {
-    _id: ID_SUPERADMIN,
-    name: 'Eleanor Vance (Super Admin)',
-    email: 'superadmin@communityhub.com',
-    password: '$2a$10$abcdefghijklmnopqrstuvwxyz123456',
-    phone: '+91 90000 11111',
-    role: 'SUPER_ADMIN',
-    status: 'ACTIVE',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80'
-  },
-  {
-    _id: ID_ADMIN,
-    name: 'Rajesh Sharma (Admin)',
-    email: 'admin@greenfield.com',
-    password: '$2a$10$abcdefghijklmnopqrstuvwxyz123456',
-    phone: '+91 98765 11223',
-    role: 'COMMUNITY_ADMIN',
-    status: 'ACTIVE',
-    community: { _id: '65f1a2b3c4d5e6f7a8b9c0d1', name: 'Greenfield Heights & Villa Enclave', code: 'GHVE-2026' },
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=300&q=80'
-  },
-  {
-    _id: ID_RESIDENT1,
-    name: 'Aarav Mehta',
-    email: 'resident@greenfield.com',
-    password: '$2a$10$abcdefghijklmnopqrstuvwxyz123456',
-    phone: '+91 91234 56789',
-    role: 'RESIDENT',
-    status: 'ACTIVE',
-    community: { _id: '65f1a2b3c4d5e6f7a8b9c0d1', name: 'Greenfield Heights & Villa Enclave', code: 'GHVE-2026' },
-    villa: { _id: '65f1a2b3c4d5e6f7a8b9c0d2', villaNumber: 'V-101', block: 'Phase 1 - Royal Palms' },
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80',
-    familyMembers: [
-      { _id: 'fam_1', name: 'Priya Mehta', relation: 'Spouse', phone: '+91 91234 56790', age: 32 }
-    ]
-  },
-  {
-    _id: ID_GUARD,
-    name: 'Vikram Singh (Security Chief)',
-    email: 'guard@greenfield.com',
-    password: '$2a$10$abcdefghijklmnopqrstuvwxyz123456',
-    phone: '+91 99887 76655',
-    role: 'SECURITY_GUARD',
-    status: 'ACTIVE',
-    community: { _id: '65f1a2b3c4d5e6f7a8b9c0d1', name: 'Greenfield Heights & Villa Enclave', code: 'GHVE-2026' },
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80'
-  }
-];
+exports.clearAllUsers = () => {
+  memoryUsers = [];
+};
 
 exports.getMemoryUser = (id) => {
   return memoryUsers.find(u => u._id === id);
+};
+
+exports.getMemoryUsers = () => {
+  return memoryUsers;
 };
 
 const generateToken = (id) => {
@@ -79,10 +34,12 @@ exports.getAllResidents = async (req, res, next) => {
         .populate('community')
         .populate('villa')
         .select('-password');
-      return res.status(200).json({ success: true, count: residents.length, residents });
+      const uniqueResidents = Array.from(new Map(residents.map(item => [item.email.toLowerCase(), item])).values());
+      return res.status(200).json({ success: true, count: uniqueResidents.length, residents: uniqueResidents });
     } else {
       const residents = memoryUsers.filter(u => u.role === 'RESIDENT');
-      return res.status(200).json({ success: true, count: residents.length, residents });
+      const uniqueResidents = Array.from(new Map(residents.map(item => [item.email.toLowerCase(), item])).values());
+      return res.status(200).json({ success: true, count: uniqueResidents.length, residents: uniqueResidents });
     }
   } catch (error) {
     next(error);
@@ -132,27 +89,33 @@ exports.deleteResident = async (req, res, next) => {
   }
 };
 
-// @desc Register User
+// @desc Register User (Clean Registration for Any Role)
 // @route POST /api/auth/register
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password, phone, role, communityId, villaId } = req.body;
+    const { name, email, password, phone, role, communityName, villaNumber, buildingBlock, floorNumber } = req.body;
     const isConnected = mongoose.connection.readyState === 1;
+
+    if (!email || !password || !name) {
+      return res.status(400).json({ success: false, message: 'Please provide name, email, and password' });
+    }
 
     if (isConnected) {
       const userExists = await User.findOne({ email });
       if (userExists) {
-        return res.status(400).json({ success: false, message: 'User already exists with this email' });
+        return res.status(400).json({ success: false, message: 'User already exists with this email address' });
       }
 
       const user = await User.create({
         name,
         email,
         password,
-        phone,
+        phone: phone || '',
         role: role || 'RESIDENT',
-        community: communityId || null,
-        villa: villaId || null
+        buildingBlock: buildingBlock || 'Building A',
+        floorNumber: floorNumber || 'Floor 1',
+        villaNumber: villaNumber || 'Flat 101',
+        status: 'ACTIVE'
       });
 
       const token = generateToken(user._id);
@@ -166,6 +129,9 @@ exports.register = async (req, res, next) => {
           email: user.email,
           phone: user.phone,
           role: user.role,
+          buildingBlock: user.buildingBlock,
+          floorNumber: user.floorNumber,
+          villaNumber: user.villaNumber,
           status: user.status || 'ACTIVE',
           community: user.community,
           villa: user.villa,
@@ -175,7 +141,7 @@ exports.register = async (req, res, next) => {
     } else {
       const existing = memoryUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (existing) {
-        return res.status(400).json({ success: false, message: 'User already exists with this email' });
+        return res.status(400).json({ success: false, message: 'User already exists with this email address' });
       }
 
       const validId = new mongoose.Types.ObjectId().toString();
@@ -185,11 +151,14 @@ exports.register = async (req, res, next) => {
         name,
         email,
         password,
-        phone,
+        phone: phone || '',
         role: role || 'RESIDENT',
+        buildingBlock: buildingBlock || 'Building A',
+        floorNumber: floorNumber || 'Floor 1',
+        villaNumber: villaNumber || 'Flat 101',
         status: 'ACTIVE',
-        community: { _id: '65f1a2b3c4d5e6f7a8b9c0d1', name: 'Greenfield Heights & Villa Enclave', code: 'GHVE-2026' },
-        villa: { _id: '65f1a2b3c4d5e6f7a8b9c0d2', villaNumber: 'V-101', block: 'Phase 1 - Royal Palms' },
+        community: communityName ? { _id: `comm_${Date.now()}`, name: communityName, code: 'COMM-001' } : null,
+        villa: villaNumber ? { _id: `villa_${Date.now()}`, villaNumber, block: buildingBlock || 'Building A' } : null,
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80',
         familyMembers: []
       };
@@ -223,7 +192,7 @@ exports.login = async (req, res, next) => {
     if (isConnected) {
       const user = await User.findOne({ email }).select('+password').populate('community').populate('villa');
       if (!user || !(await user.matchPassword(password))) {
-        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        return res.status(401).json({ success: false, message: 'Invalid credentials. Account not found or wrong password.' });
       }
 
       const token = generateToken(user._id);
@@ -246,22 +215,13 @@ exports.login = async (req, res, next) => {
         }
       });
     } else {
-      let user = memoryUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const user = memoryUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!user) {
-        const roleByEmail = {
-          'superadmin@communityhub.com': 'SUPER_ADMIN',
-          'admin@greenfield.com': 'COMMUNITY_ADMIN',
-          'resident@greenfield.com': 'RESIDENT',
-          'guard@greenfield.com': 'SECURITY_GUARD'
-        };
-
-        if (roleByEmail[email.toLowerCase()]) {
-          user = memoryUsers.find(u => u.role === roleByEmail[email.toLowerCase()]);
-        }
+        return res.status(401).json({ success: false, message: 'Invalid credentials. Account not found. Please register first.' });
       }
 
-      if (!user) {
-        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      if (user.password !== password && !user.password.startsWith('$2a$')) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials. Wrong password.' });
       }
 
       const token = generateToken(user._id);
@@ -288,8 +248,10 @@ exports.getMe = async (req, res, next) => {
       if (user) return res.status(200).json({ success: true, user });
     }
 
-    const user = memoryUsers.find(u => u._id === req.user._id) || memoryUsers.find(u => u.role === req.user.role) || memoryUsers[2];
-    return res.status(200).json({ success: true, user });
+    const user = memoryUsers.find(u => u._id === req.user._id);
+    if (user) return res.status(200).json({ success: true, user });
+
+    return res.status(401).json({ success: false, message: 'Session expired or user not found' });
   } catch (error) {
     next(error);
   }

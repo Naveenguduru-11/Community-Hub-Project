@@ -8,22 +8,32 @@ exports.clearMemoryComplaints = () => {
   memoryComplaints = [];
 };
 
+// @desc Create New Complaint Ticket
+// @route POST /api/complaints
 exports.createComplaint = async (req, res, next) => {
   try {
-    const { title, description, category, priority, imageUrl } = req.body;
+    const { title, description, category, priority, imageUrl, villaNumber } = req.body;
     const isConnected = mongoose.connection.readyState === 1;
 
+    if (!title || !description) {
+      return res.status(400).json({ success: false, message: 'Please enter complaint title and description' });
+    }
+
     if (isConnected) {
-      const complaint = await Complaint.create({
+      const complaintData = {
         title,
         description,
         category: category || 'OTHER',
         priority: priority || 'MEDIUM',
         imageUrl: imageUrl || '',
         raisedBy: req.user._id,
-        villa: req.user.villa,
-        community: req.user.community
-      });
+        villaNumber: villaNumber || 'Villa 101'
+      };
+
+      if (req.user.villa) complaintData.villa = req.user.villa;
+      if (req.user.community) complaintData.community = req.user.community;
+
+      const complaint = await Complaint.create(complaintData);
 
       const populated = await Complaint.findById(complaint._id)
         .populate('raisedBy', 'name email phone')
@@ -40,7 +50,7 @@ exports.createComplaint = async (req, res, next) => {
         priority: priority || 'MEDIUM',
         status: 'OPEN',
         raisedBy: { _id: req.user._id, name: req.user.name, email: req.user.email },
-        villa: req.user.villa || { villaNumber: 'V-101', block: 'Phase 1' },
+        villa: req.user.villa || { villaNumber: villaNumber || 'V-101', block: 'Phase 1' },
         assignedTo: 'Maintenance Team'
       };
 
@@ -53,6 +63,8 @@ exports.createComplaint = async (req, res, next) => {
   }
 };
 
+// @desc Delete Complaint Ticket
+// @route DELETE /api/complaints/:id
 exports.deleteComplaint = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -71,6 +83,8 @@ exports.deleteComplaint = async (req, res, next) => {
   }
 };
 
+// @desc Get All Complaints
+// @route GET /api/complaints
 exports.getComplaints = async (req, res, next) => {
   try {
     const isConnected = mongoose.connection.readyState === 1;
@@ -81,15 +95,19 @@ exports.getComplaints = async (req, res, next) => {
         .populate('villa', 'villaNumber block')
         .sort({ createdAt: -1 });
 
-      return res.status(200).json({ success: true, count: complaints.length, complaints });
+      const uniqueComplaints = Array.from(new Map(complaints.map(item => [item._id.toString(), item])).values());
+      return res.status(200).json({ success: true, count: uniqueComplaints.length, complaints: uniqueComplaints });
     } else {
-      return res.status(200).json({ success: true, count: memoryComplaints.length, complaints: memoryComplaints });
+      const uniqueComplaints = Array.from(new Map(memoryComplaints.map(item => [item._id, item])).values());
+      return res.status(200).json({ success: true, count: uniqueComplaints.length, complaints: uniqueComplaints });
     }
   } catch (error) {
     next(error);
   }
 };
 
+// @desc Update Complaint Status / Assignment / Resolution Notes
+// @route PUT /api/complaints/:id
 exports.updateComplaintStatus = async (req, res, next) => {
   try {
     const { status, assignedTo, resolutionNotes } = req.body;

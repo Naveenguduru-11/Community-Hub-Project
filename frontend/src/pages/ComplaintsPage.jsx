@@ -8,21 +8,21 @@ export const ComplaintsPage = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  useEffect(() => {
-    fetchComplaints();
-  }, []);
-
   const fetchComplaints = async () => {
     setLoading(true);
     try {
       const res = await complaintService.getComplaints();
-      setComplaints(res.data.complaints);
+      setComplaints(res.data.complaints || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchComplaints();
+  }, []);
 
   const handleDeleteComplaint = async (id, title) => {
     if (confirm(`Delete helpdesk ticket "${title}"?`)) {
@@ -52,7 +52,7 @@ export const ComplaintsPage = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {complaints.map(c => (
+        {Array.from(new Map(complaints.map(c => [c._id || c.title, c])).values()).map(c => (
           <div key={c._id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2.5 py-0.5 rounded-full">

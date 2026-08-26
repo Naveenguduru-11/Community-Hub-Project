@@ -8,21 +8,21 @@ export const ResidentDirectoryPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  useEffect(() => {
-    fetchResidents();
-  }, []);
-
   const fetchResidents = async () => {
     setLoading(true);
     try {
       const res = await authService.getAllResidents();
-      setResidents(res.data.residents);
+      setResidents(res.data.residents || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchResidents();
+  }, []);
 
   const handleStatusChange = async (id, newStatus) => {
     try {
@@ -44,7 +44,11 @@ export const ResidentDirectoryPage = () => {
     }
   };
 
-  const filteredResidents = residents.filter(r => {
+  const uniqueResidents = Array.from(
+    new Map(residents.map(r => [r.email?.toLowerCase() || r._id, r])).values()
+  );
+
+  const filteredResidents = uniqueResidents.filter(r => {
     const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.phone && r.phone.includes(searchTerm)) ||

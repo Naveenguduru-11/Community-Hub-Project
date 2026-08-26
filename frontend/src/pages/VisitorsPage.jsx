@@ -8,21 +8,21 @@ export const VisitorsPage = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  useEffect(() => {
-    fetchVisitors();
-  }, []);
-
   const fetchVisitors = async () => {
     setLoading(true);
     try {
       const res = await visitorService.getVisitors();
-      setVisitors(res.data.visitors);
+      setVisitors(res.data.visitors || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchVisitors();
+  }, []);
 
   const handleDeleteVisitor = async (id, name) => {
     if (confirm(`Cancel and delete guest pass for ${name}?`)) {

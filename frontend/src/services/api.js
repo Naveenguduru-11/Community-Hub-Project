@@ -65,9 +65,10 @@ export const paymentService = {
 };
 
 export const eventService = {
-  createEvent: (data) => api.post('/events', data),
   getEvents: () => api.get('/events'),
+  createEvent: (data) => api.post('/events', data),
   rsvp: (id, data) => api.post(`/events/${id}/rsvp`, data),
+  joinGame: (id, data) => api.post(`/events/${id}/join`, data),
   deleteEvent: (id) => api.delete(`/events/${id}`)
 };
 
@@ -85,5 +86,6 @@ export const communityService = {
 
 export const analyticsService = {
   getStats: () => api.get('/analytics/dashboard'),
+  getDatabaseExplorer: () => api.get('/analytics/database'),
   clearData: () => api.post('/analytics/clear-data')
 };

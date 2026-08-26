@@ -1,16 +1,7 @@
 const mongoose = require('mongoose');
 const Community = require('../models/Community');
 
-const memoryCommunities = [
-  {
-    _id: '65f1a2b3c4d5e6f7a8b9c0d1',
-    name: 'Greenfield Heights & Villa Enclave',
-    code: 'GHVE-2026',
-    address: { street: '100 Feet Outer Ring Road, Jubilee Hills', city: 'Hyderabad', state: 'Telangana', zipCode: '500033' },
-    totalVillas: 40,
-    maintenanceMonthlyRate: 4500
-  }
-];
+const memoryCommunities = [];
 
 exports.createCommunity = async (req, res, next) => {
   try {

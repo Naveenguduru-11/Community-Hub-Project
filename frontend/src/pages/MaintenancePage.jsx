@@ -28,7 +28,8 @@ export const MaintenancePage = () => {
     month: 'August 2026',
     amount: '',
     dueDate: '',
-    villaId: ''
+    villaId: '',
+    adminNotes: ''
   });
 
   // Edit Bill Modal State
@@ -39,19 +40,15 @@ export const MaintenancePage = () => {
     month: '',
     amount: '',
     dueDate: '',
-    status: 'PENDING'
+    status: 'PENDING',
+    adminNotes: ''
   });
-
-  useEffect(() => {
-    fetchPayments();
-    if (isAdmin) fetchVillas();
-  }, []);
 
   const fetchPayments = async () => {
     setLoading(true);
     try {
       const res = await paymentService.getPayments();
-      setPayments(res.data.payments);
+      setPayments(res.data.payments || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -62,11 +59,18 @@ export const MaintenancePage = () => {
   const fetchVillas = async () => {
     try {
       const res = await villaService.getVillas();
-      setVillas(res.data.villas);
+      setVillas(res.data.villas || []);
     } catch (err) {
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    fetchPayments();
+    if (isAdmin) fetchVillas();
+  }, []);
+
+
 
   const handleUpdateRate = async (e) => {
     e.preventDefault();
@@ -92,7 +96,8 @@ export const MaintenancePage = () => {
         month: 'August 2026',
         amount: '',
         dueDate: '',
-        villaId: ''
+        villaId: '',
+        adminNotes: ''
       });
       fetchPayments();
     } catch (err) {
@@ -108,7 +113,8 @@ export const MaintenancePage = () => {
       month: p.month,
       amount: p.totalAmount,
       dueDate: p.dueDate ? new Date(p.dueDate).toISOString().split('T')[0] : '',
-      status: p.status
+      status: p.status,
+      adminNotes: p.adminNotes || ''
     });
   };
 
@@ -265,6 +271,15 @@ export const MaintenancePage = () => {
                   <span className="font-bold text-slate-900 dark:text-white">Total Amount:</span>
                   <span className="text-xl font-black text-blue-600 dark:text-blue-400">₹{p.totalAmount}</span>
                 </div>
+
+                {p.adminNotes && (
+                  <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                    <span className="font-bold flex items-center gap-1 mb-0.5">
+                      📝 Admin Note / Remark:
+                    </span>
+                    <span>{p.adminNotes}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -291,173 +306,246 @@ export const MaintenancePage = () => {
         ))}
       </div>
 
-      {/* Modal: Add Custom Bill (Admin) */}
+      {/* Inline Section: Add Custom Bill (Admin) */}
       {showCustomBillModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
-              <h3 className="font-bold text-slate-900 dark:text-white text-lg">Issue Custom / Other Bill</h3>
-              <button onClick={() => setShowCustomBillModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+        <div className="bg-slate-900 text-white rounded-3xl p-6 border border-blue-500/50 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+              <Plus className="w-5 h-5 text-blue-400" />
+              <span>Issue Custom / Utility / Fine Invoice</span>
+            </h3>
+            <button onClick={() => setShowCustomBillModal(false)} className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg">
+              Close Form
+            </button>
+          </div>
+
+          <form onSubmit={handleCreateCustomBill} className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-6 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Bill Title</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. EV Charging Fee / Clubhouse Event"
+                value={customBillForm.title}
+                onChange={(e) => setCustomBillForm({ ...customBillForm, title: e.target.value })}
+                className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
             </div>
 
-            <form onSubmit={handleCreateCustomBill} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Bill Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. EV Charging Fee / Clubhouse Event"
-                  value={customBillForm.title}
-                  onChange={(e) => setCustomBillForm({ ...customBillForm, title: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
-                />
-              </div>
+            <div className="md:col-span-3 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Bill Category</label>
+              <select
+                value={customBillForm.billType}
+                onChange={(e) => setCustomBillForm({ ...customBillForm, billType: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
+              >
+                <option value="UTILITY">Utility Water/Power</option>
+                <option value="EV_CHARGING">EV Charging Station</option>
+                <option value="EVENT_FEE">Clubhouse Event Fee</option>
+                <option value="REPAIR_FINE">Property Repair Fine</option>
+                <option value="OTHER">Other Custom Charge</option>
+              </select>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Bill Category</label>
-                  <select
-                    value={customBillForm.billType}
-                    onChange={(e) => setCustomBillForm({ ...customBillForm, billType: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
-                  >
-                    <option value="UTILITY">Utility Water/Power</option>
-                    <option value="EV_CHARGING">EV Charging Station</option>
-                    <option value="EVENT_FEE">Clubhouse Event Fee</option>
-                    <option value="REPAIR_FINE">Property Repair Fine</option>
-                    <option value="OTHER">Other Custom Charge</option>
-                  </select>
-                </div>
+            <div className="md:col-span-3 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Target Villa</label>
+              <select
+                required
+                value={customBillForm.villaId}
+                onChange={(e) => setCustomBillForm({ ...customBillForm, villaId: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
+              >
+                <option value="">Select Villa</option>
+                {villas.map(v => (
+                  <option key={v._id} value={v._id}>{v.villaNumber} ({v.block})</option>
+                ))}
+                {!villas.length && <option value="villa_101">V-101 (Phase 1)</option>}
+              </select>
+            </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Villa</label>
-                  <select
-                    required
-                    value={customBillForm.villaId}
-                    onChange={(e) => setCustomBillForm({ ...customBillForm, villaId: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
-                  >
-                    <option value="">Select Villa</option>
-                    {villas.map(v => (
-                      <option key={v._id} value={v._id}>{v.villaNumber} ({v.block})</option>
-                    ))}
-                    {!villas.length && <option value="villa_101">V-101 (Phase 1)</option>}
-                  </select>
-                </div>
-              </div>
+            <div className="md:col-span-4 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Amount (₹)</label>
+              <input
+                type="number"
+                required
+                min="1"
+                placeholder="1200"
+                value={customBillForm.amount}
+                onChange={(e) => setCustomBillForm({ ...customBillForm, amount: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="1200"
-                    value={customBillForm.amount}
-                    onChange={(e) => setCustomBillForm({ ...customBillForm, amount: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Due Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={customBillForm.dueDate}
-                    onChange={(e) => setCustomBillForm({ ...customBillForm, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
-                  />
-                </div>
-              </div>
+            <div className="md:col-span-4 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Due Date</label>
+              <input
+                type="date"
+                required
+                value={customBillForm.dueDate}
+                onChange={(e) => setCustomBillForm({ ...customBillForm, dueDate: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
+              />
+            </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCustomBillModal(false)}
-                  className="flex-1 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-semibold rounded-xl text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs"
-                >
-                  Issue Bill
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="md:col-span-4 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Admin Note / Remark (Optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. Calculated based on 150 kWh charging"
+                value={customBillForm.adminNotes}
+                onChange={(e) => setCustomBillForm({ ...customBillForm, adminNotes: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
+              />
+            </div>
+
+            <div className="md:col-span-12 flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowCustomBillModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/25"
+              >
+                Issue Invoice
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* Modal: Edit Existing Bill (Admin) */}
+      {/* Inline Section: Edit Existing Bill (Admin Increase/Decrease Amount & Notes) */}
       {editingBill && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
-              <h3 className="font-bold text-slate-900 dark:text-white text-lg">Edit Bill Details</h3>
-              <button onClick={() => setEditingBill(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+        <div className="bg-slate-900 text-white rounded-3xl p-6 border border-amber-500/50 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+              <Edit2 className="w-5 h-5 text-amber-400" />
+              <span>Modify Maintenance Invoice: {editingBill.title}</span>
+            </h3>
+            <button onClick={() => setEditingBill(null)} className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg">
+              Close Editor
+            </button>
+          </div>
+
+          <form onSubmit={handleSaveEditBill} className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-6 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Bill Title</label>
+              <input
+                type="text"
+                required
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl"
+              />
             </div>
 
-            <form onSubmit={handleSaveEditBill} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Bill Title</label>
+            {/* Increase / Decrease Amount Control Box */}
+            <div className="md:col-span-6 bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2">
+              <label className="block text-xs font-bold text-slate-200">
+                Bill Amount Adjuster (Increase / Decrease)
+              </label>
+              
+              <div className="flex items-center gap-2">
+                <span className="font-black text-sm text-slate-400">₹</span>
                 <input
-                  type="text"
+                  type="number"
                   required
-                  value={editForm.title}
-                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
+                  min="0"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                  className="flex-1 px-3 py-1.5 text-base font-bold bg-slate-800 border border-slate-700 rounded-xl text-blue-400"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    value={editForm.amount}
-                    onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
-                  <select
-                    value={editForm.status}
-                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
-                  >
-                    <option value="PENDING">PENDING</option>
-                    <option value="PAID">PAID</option>
-                    <option value="OVERDUE">OVERDUE</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
+              {/* Quick Adjustment Pills */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <span className="text-[10px] text-slate-400 font-semibold self-center mr-1">Quick Adjust:</span>
                 <button
                   type="button"
-                  onClick={() => setEditingBill(null)}
-                  className="flex-1 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-semibold rounded-xl text-xs"
+                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) + 500) })}
+                  className="px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-md text-[11px] font-bold hover:bg-emerald-900"
                 >
-                  Cancel
+                  + ₹500
                 </button>
                 <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs"
+                  type="button"
+                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) + 100) })}
+                  className="px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-md text-[11px] font-bold hover:bg-emerald-900"
                 >
-                  Save Changes
+                  + ₹100
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) - 100) })}
+                  className="px-2 py-0.5 bg-rose-950 text-rose-300 border border-rose-800 rounded-md text-[11px] font-bold hover:bg-rose-900"
+                >
+                  - ₹100
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) - 500) })}
+                  className="px-2 py-0.5 bg-rose-950 text-rose-300 border border-rose-800 rounded-md text-[11px] font-bold hover:bg-rose-900"
+                >
+                  - ₹500
                 </button>
               </div>
-            </form>
-          </div>
+            </div>
+
+            <div className="md:col-span-3 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Billing Period</label>
+              <input
+                type="text"
+                value={editForm.month}
+                onChange={(e) => setEditForm({ ...editForm, month: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
+              />
+            </div>
+
+            <div className="md:col-span-3 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">Payment Status</label>
+              <select
+                value={editForm.status}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl font-bold"
+              >
+                <option value="PENDING">PENDING</option>
+                <option value="PAID">PAID</option>
+                <option value="OVERDUE">OVERDUE</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-6 space-y-1">
+              <label className="block text-xs font-semibold text-slate-300">
+                Admin Note / Reason for Amount Modification
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Added ₹200 late fee surcharge / Discount applied for early payment"
+                value={editForm.adminNotes}
+                onChange={(e) => setEditForm({ ...editForm, adminNotes: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
+              />
+            </div>
+
+            <div className="md:col-span-12 flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingBill(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-amber-500/25"
+              >
+                Save Modified Bill
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

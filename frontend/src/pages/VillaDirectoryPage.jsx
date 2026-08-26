@@ -6,21 +6,21 @@ export const VillaDirectoryPage = () => {
   const [villas, setVillas] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchVillas();
-  }, []);
-
   const fetchVillas = async () => {
     setLoading(true);
     try {
       const res = await villaService.getVillas();
-      setVillas(res.data.villas);
+      setVillas(res.data.villas || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchVillas();
+  }, []);
 
   return (
     <div className="space-y-6">

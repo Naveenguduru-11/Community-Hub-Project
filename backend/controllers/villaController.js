@@ -1,11 +1,7 @@
 const mongoose = require('mongoose');
 const Villa = require('../models/Villa');
 
-const memoryVillas = [
-  { _id: 'villa_101', villaNumber: 'V-101', block: 'Phase 1 - Royal Palms', sizeSqFt: 3200, bedrooms: 4, occupancyStatus: 'OWNER_OCCUPIED', owner: { name: 'Aarav Mehta' } },
-  { _id: 'villa_102', villaNumber: 'V-102', block: 'Phase 1 - Royal Palms', sizeSqFt: 2800, bedrooms: 3, occupancyStatus: 'OWNER_OCCUPIED', owner: { name: 'Ananya Reddy' } },
-  { _id: 'villa_103', villaNumber: 'V-103', block: 'Phase 2 - Magnolia Lane', sizeSqFt: 3500, bedrooms: 4, occupancyStatus: 'VACANT' }
-];
+const memoryVillas = [];
 
 exports.createVilla = async (req, res, next) => {
   try {
@@ -28,9 +24,11 @@ exports.getVillas = async (req, res, next) => {
     const isConnected = mongoose.connection.readyState === 1;
     if (isConnected) {
       const villas = await Villa.find().populate('owner tenant', 'name email phone');
-      return res.status(200).json({ success: true, count: villas.length, villas });
+      const uniqueVillas = Array.from(new Map(villas.map(item => [item.villaNumber || item._id.toString(), item])).values());
+      return res.status(200).json({ success: true, count: uniqueVillas.length, villas: uniqueVillas });
     } else {
-      return res.status(200).json({ success: true, count: memoryVillas.length, villas: memoryVillas });
+      const uniqueVillas = Array.from(new Map(memoryVillas.map(item => [item.villaNumber || item._id, item])).values());
+      return res.status(200).json({ success: true, count: uniqueVillas.length, villas: uniqueVillas });
     }
   } catch (error) {
     next(error);

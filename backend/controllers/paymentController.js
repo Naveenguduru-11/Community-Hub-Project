@@ -10,6 +10,7 @@ exports.clearMemoryPayments = () => {
   memoryPayments = [];
 };
 
+
 // Generate Bulk Monthly Maintenance Bills across occupied villas
 exports.generateBills = async (req, res, next) => {
   try {
@@ -67,7 +68,7 @@ exports.generateBills = async (req, res, next) => {
 // Create Custom / Other Bill (Utility, EV Charging, Event Fee, Repair Fine) - Admin feature
 exports.createCustomBill = async (req, res, next) => {
   try {
-    const { title, billType, month, amount, dueDate, villaId, residentId } = req.body;
+    const { title, billType, month, amount, dueDate, villaId, residentId, adminNotes } = req.body;
     const receiptNumber = `INV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
     const isConnected = mongoose.connection.readyState === 1;
 
@@ -82,7 +83,8 @@ exports.createCustomBill = async (req, res, next) => {
         resident: residentId || req.user._id,
         villa: villaId,
         community: req.user.community,
-        receiptNumber
+        receiptNumber,
+        adminNotes: adminNotes || ''
       });
 
       const populated = await Payment.findById(bill._id)
@@ -102,7 +104,8 @@ exports.createCustomBill = async (req, res, next) => {
         dueDate: dueDate || new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
         resident: { _id: req.user._id, name: req.user.name, email: req.user.email },
         villa: { _id: villaId || 'villa_101', villaNumber: 'V-101', block: 'Phase 1' },
-        receiptNumber
+        receiptNumber,
+        adminNotes: adminNotes || ''
       };
       memoryPayments.unshift(bill);
       return res.status(201).json({ success: true, bill });
@@ -112,24 +115,25 @@ exports.createCustomBill = async (req, res, next) => {
   }
 };
 
-// Edit Existing Bill - Admin feature
+// Edit Existing Bill - Admin feature (Increase/Decrease Amount & Add Notes)
 exports.updateBill = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, billType, month, amount, dueDate, status } = req.body;
+    const { title, billType, month, amount, dueDate, status, adminNotes } = req.body;
     const isConnected = mongoose.connection.readyState === 1;
 
     if (isConnected && mongoose.Types.ObjectId.isValid(id)) {
       const updateData = {};
-      if (title) updateData.title = title;
-      if (billType) updateData.billType = billType;
-      if (month) updateData.month = month;
-      if (amount) {
+      if (title !== undefined) updateData.title = title;
+      if (billType !== undefined) updateData.billType = billType;
+      if (month !== undefined) updateData.month = month;
+      if (amount !== undefined) {
         updateData.amount = Number(amount);
         updateData.totalAmount = Number(amount);
       }
-      if (dueDate) updateData.dueDate = dueDate;
-      if (status) {
+      if (dueDate !== undefined) updateData.dueDate = dueDate;
+      if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
+      if (status !== undefined) {
         updateData.status = status;
         if (status === 'PAID') updateData.paidDate = new Date();
       }
@@ -142,15 +146,16 @@ exports.updateBill = async (req, res, next) => {
     } else {
       const bill = memoryPayments.find(p => p._id === id);
       if (bill) {
-        if (title) bill.title = title;
-        if (billType) bill.billType = billType;
-        if (month) bill.month = month;
-        if (amount) {
+        if (title !== undefined) bill.title = title;
+        if (billType !== undefined) bill.billType = billType;
+        if (month !== undefined) bill.month = month;
+        if (amount !== undefined) {
           bill.amount = Number(amount);
           bill.totalAmount = Number(amount);
         }
-        if (dueDate) bill.dueDate = dueDate;
-        if (status) {
+        if (dueDate !== undefined) bill.dueDate = dueDate;
+        if (adminNotes !== undefined) bill.adminNotes = adminNotes;
+        if (status !== undefined) {
           bill.status = status;
           if (status === 'PAID') bill.paidDate = new Date();
         }
@@ -274,9 +279,11 @@ exports.getPayments = async (req, res, next) => {
         .populate('villa', 'villaNumber block')
         .sort({ createdAt: -1 });
 
-      return res.status(200).json({ success: true, count: payments.length, payments });
+      const uniquePayments = Array.from(new Map(payments.map(item => [item.receiptNumber || item._id.toString(), item])).values());
+      return res.status(200).json({ success: true, count: uniquePayments.length, payments: uniquePayments });
     } else {
-      return res.status(200).json({ success: true, count: memoryPayments.length, payments: memoryPayments });
+      const uniquePayments = Array.from(new Map(memoryPayments.map(item => [item.receiptNumber || item._id, item])).values());
+      return res.status(200).json({ success: true, count: uniquePayments.length, payments: uniquePayments });
     }
   } catch (error) {
     next(error);

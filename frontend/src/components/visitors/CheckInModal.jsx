@@ -16,14 +16,6 @@ export const CheckInModal = ({ isOpen, onClose, onCheckInSuccess }) => {
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    return () => {
-      stopWebcam();
-    };
-  }, []);
-
-  if (!isOpen) return null;
-
   const stopWebcam = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -31,6 +23,14 @@ export const CheckInModal = ({ isOpen, onClose, onCheckInSuccess }) => {
     }
     setIsCameraActive(false);
   };
+
+  useEffect(() => {
+    return () => {
+      stopWebcam();
+    };
+  }, []);
+
+  if (!isOpen) return null;
 
   const startWebcam = async () => {
     setCameraError('');

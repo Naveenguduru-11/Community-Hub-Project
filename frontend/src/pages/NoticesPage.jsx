@@ -17,21 +17,21 @@ export const NoticesPage = () => {
     priority: 'NORMAL'
   });
 
-  useEffect(() => {
-    fetchNotices();
-  }, []);
-
   const fetchNotices = async () => {
     setLoading(true);
     try {
       const res = await noticeService.getNotices();
-      setNotices(res.data.notices);
+      setNotices(res.data.notices || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchNotices();
+  }, []);
 
   const handleCreateNotice = async (e) => {
     e.preventDefault();
