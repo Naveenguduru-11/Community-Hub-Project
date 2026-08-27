@@ -119,6 +119,31 @@ export const GuardDashboard = () => {
         </div>
       </div>
 
+      {/* Quick Passcode Check-In Bar */}
+      <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-3xl p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+              <Key className="w-4 h-4 text-amber-500" />
+              <span>Quick 6-Digit Passcode Gate Check-In</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+              Enter visitor's 6-digit pre-approved passcode or scan QR code to grant instant entry.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <button
+              onClick={() => setShowCheckInModal(true)}
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 shrink-0"
+            >
+              <Camera className="w-4 h-4" />
+              <span>Verify Passcode & Scan QR</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Main Visitor Gate Logs Table */}
       <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">

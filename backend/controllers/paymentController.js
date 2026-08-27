@@ -274,14 +274,57 @@ exports.getPayments = async (req, res, next) => {
     const isConnected = mongoose.connection.readyState === 1;
 
     if (isConnected) {
-      const payments = await Payment.find()
+      let payments = await Payment.find()
         .populate('resident', 'name email phone')
         .populate('villa', 'villaNumber block')
         .sort({ createdAt: -1 });
 
+      if (payments.length === 0) {
+        // Seed default initial maintenance bills for residents
+        const sample1 = await Payment.create({
+          title: 'Monthly Maintenance Fee - August 2026',
+          billType: 'MAINTENANCE',
+          month: 'August 2026',
+          amount: 4500,
+          totalAmount: 4500,
+          status: 'PENDING',
+          dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+          resident: req.user?._id || null,
+          receiptNumber: `INV-${Date.now()}-4500`
+        });
+
+        const sample2 = await Payment.create({
+          title: 'Common Amenities & Clubhouse Tariff',
+          billType: 'AMENITY',
+          month: 'August 2026',
+          amount: 1500,
+          totalAmount: 1500,
+          status: 'PENDING',
+          dueDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+          resident: req.user?._id || null,
+          receiptNumber: `INV-${Date.now()}-1500`
+        });
+
+        payments = [sample1, sample2];
+      }
+
       const uniquePayments = Array.from(new Map(payments.map(item => [item.receiptNumber || item._id.toString(), item])).values());
       return res.status(200).json({ success: true, count: uniquePayments.length, payments: uniquePayments });
     } else {
+      if (memoryPayments.length === 0) {
+        memoryPayments.push({
+          _id: `pay_${Date.now()}_1`,
+          title: 'Monthly Maintenance Fee - August 2026',
+          billType: 'MAINTENANCE',
+          month: 'August 2026',
+          amount: 4500,
+          totalAmount: 4500,
+          status: 'PENDING',
+          dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+          resident: { _id: req.user?._id, name: req.user?.name, email: req.user?.email },
+          receiptNumber: `INV-${Date.now()}-4500`
+        });
+      }
       const uniquePayments = Array.from(new Map(memoryPayments.map(item => [item.receiptNumber || item._id, item])).values());
       return res.status(200).json({ success: true, count: uniquePayments.length, payments: uniquePayments });
     }
