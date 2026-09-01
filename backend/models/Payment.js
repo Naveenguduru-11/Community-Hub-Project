@@ -21,8 +21,7 @@ const paymentSchema = new mongoose.Schema({
   razorpayPaymentId: { type: String, default: '' },
   razorpaySignature: { type: String, default: '' },
   receiptNumber: { type: String, required: true, unique: true },
-  adminNotes: { type: String, default: '' },
-  isAdminIssued: { type: Boolean, default: false }  // true = explicitly issued by admin; false = legacy auto-seeded
+  adminNotes: { type: String, default: '' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Payment', paymentSchema);

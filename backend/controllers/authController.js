@@ -100,35 +100,10 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please provide name, email, and password' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const cleanVillaNumber = villaNumber ? villaNumber.trim() : '';
-    const cleanBlock = buildingBlock ? buildingBlock.trim() : '';
-    const cleanFloor = floorNumber ? floorNumber.trim() : '';
-
     if (isConnected) {
-      const userExists = await User.findOne({ email: normalizedEmail });
+      const userExists = await User.findOne({ email });
       if (userExists) {
         return res.status(400).json({ success: false, message: 'User already exists with this email address' });
-      }
-
-      const Villa = require('../models/Villa');
-      const Community = require('../models/Community');
-
-      let communityDoc = await Community.findOne();
-      let villaDoc;
-
-      if (cleanVillaNumber) {
-        villaDoc = await Villa.findOne({ villaNumber: cleanVillaNumber });
-        if (!villaDoc) {
-          villaDoc = await Villa.create({
-            villaNumber: cleanVillaNumber,
-            block: cleanBlock || 'Phase 1',
-            sizeSqFt: 3000,
-            bedrooms: 3,
-            community: communityDoc?._id,
-            occupancyStatus: 'OWNER_OCCUPIED'
-          });
-        }
       }
 
       const user = await User.create({
@@ -137,26 +112,18 @@ exports.register = async (req, res, next) => {
         password,
         phone: phone || '',
         role: role || 'RESIDENT',
-        buildingBlock: cleanBlock,
-        floorNumber: cleanFloor,
-        villaNumber: cleanVillaNumber,
-        community: communityDoc?._id,
-        villa: villaDoc?._id,
+        buildingBlock: buildingBlock || 'Building A',
+        floorNumber: floorNumber || 'Floor 1',
+        villaNumber: villaNumber || 'Flat 101',
         status: 'ACTIVE'
       });
 
-      if (villaDoc && !villaDoc.owner) {
-        villaDoc.owner = user._id;
-        await villaDoc.save();
-      }
-
       const token = generateToken(user._id);
-      const populatedUser = await User.findById(user._id).populate('community').populate('villa');
 
       return res.status(201).json({
         success: true,
         token,
-        user: populatedUser || {
+        user: {
           _id: user._id,
           name: user.name,
           email: user.email,
@@ -186,12 +153,12 @@ exports.register = async (req, res, next) => {
         password,
         phone: phone || '',
         role: role || 'RESIDENT',
-        buildingBlock: cleanBlock,
-        floorNumber: cleanFloor,
-        villaNumber: cleanVillaNumber,
+        buildingBlock: buildingBlock || 'Building A',
+        floorNumber: floorNumber || 'Floor 1',
+        villaNumber: villaNumber || 'Flat 101',
         status: 'ACTIVE',
-        community: { _id: `comm_${Date.now()}`, name: communityName || 'Greenfield Heights', code: 'GHVE-2026' },
-        villa: cleanVillaNumber ? { _id: `villa_${Date.now()}`, villaNumber: cleanVillaNumber, block: cleanBlock || 'Phase 1' } : null,
+        community: communityName ? { _id: `comm_${Date.now()}`, name: communityName, code: 'COMM-001' } : null,
+        villa: villaNumber ? { _id: `villa_${Date.now()}`, villaNumber, block: buildingBlock || 'Building A' } : null,
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80',
         familyMembers: []
       };
@@ -220,11 +187,10 @@ exports.login = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
     const isConnected = mongoose.connection.readyState === 1;
 
     if (isConnected) {
-      const user = await User.findOne({ email: normalizedEmail }).select('+password').populate('community').populate('villa');
+      const user = await User.findOne({ email }).select('+password').populate('community').populate('villa');
       if (!user || !(await user.matchPassword(password))) {
         return res.status(401).json({ success: false, message: 'Invalid credentials. Account not found or wrong password.' });
       }
@@ -240,9 +206,6 @@ exports.login = async (req, res, next) => {
           email: user.email,
           phone: user.phone,
           role: user.role,
-          buildingBlock: user.buildingBlock,
-          floorNumber: user.floorNumber,
-          villaNumber: user.villaNumber,
           status: user.status || 'ACTIVE',
           community: user.community,
           villa: user.villa,
@@ -252,9 +215,9 @@ exports.login = async (req, res, next) => {
         }
       });
     } else {
-      const user = memoryUsers.find(u => u.email.toLowerCase() === normalizedEmail);
+      const user = memoryUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!user) {
-        return res.status(401).json({ success: false, message: 'Account not found. Please register first or check your email address.' });
+        return res.status(401).json({ success: false, message: 'Invalid credentials. Account not found. Please register first.' });
       }
 
       if (user.password !== password && !user.password.startsWith('$2a$')) {
@@ -274,26 +237,19 @@ exports.login = async (req, res, next) => {
   }
 };
 
-
 // @desc Get Current Logged In User
 // @route GET /api/auth/me
 exports.getMe = async (req, res, next) => {
   try {
     const isConnected = mongoose.connection.readyState === 1;
 
-    // Try DB first (most accurate, has full populated data)
     if (isConnected && mongoose.Types.ObjectId.isValid(req.user._id)) {
       const user = await User.findById(req.user._id).populate('community').populate('villa');
       if (user) return res.status(200).json({ success: true, user });
     }
 
-    // Try in-memory fallback
-    const memUser = memoryUsers.find(u => u._id === req.user._id?.toString());
-    if (memUser) return res.status(200).json({ success: true, user: memUser });
-
-    // Final fallback: the middleware already validated the JWT and set req.user
-    // Return it as-is so the session is never lost on a DB hiccup
-    if (req.user) return res.status(200).json({ success: true, user: req.user });
+    const user = memoryUsers.find(u => u._id === req.user._id);
+    if (user) return res.status(200).json({ success: true, user });
 
     return res.status(401).json({ success: false, message: 'Session expired or user not found' });
   } catch (error) {

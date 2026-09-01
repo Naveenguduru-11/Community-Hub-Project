@@ -1,172 +1,71 @@
 import React from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import {
-  LayoutDashboard, Users, Home, Shield,
-  QrCode, AlertCircle, Bell, CreditCard, Calendar,
-  Car, Settings, Building2, BarChart3, FileText,
-  UserPlus, Headphones, Globe, Truck, BellRing, ChevronDown, Vote, Tag
+import { 
+  LayoutDashboard, Users, Home, Shield, 
+  QrCode, AlertCircle, Bell, CreditCard, Calendar, 
+  Car, Settings 
 } from 'lucide-react';
 
-// Role-specific navigation configs
-const NAV_CONFIG = {
-  SUPER_ADMIN: [
-    { label: 'Dashboard',           path: '/',               icon: LayoutDashboard },
-    { label: 'Communities',         path: '/communities',    icon: Building2,  badge: 'Super' },  // exclusive
-    { label: 'Apartments',          path: '/villas',         icon: Home },
-    { label: 'Property Listings',   path: '/listings',       icon: Tag,        badge: 'Super' },  // exclusive
-    { label: 'Residents',           path: '/residents-directory', icon: Users },
-    { label: 'Maintenance & Billing', path: '/maintenance', icon: CreditCard },
-    { label: 'Complaints',          path: '/complaints',     icon: AlertCircle },
-    { label: 'Vehicles',            path: '/vehicles',       icon: Car },
-    { label: 'Visitors',            path: '/visitors',       icon: QrCode },
-    { label: 'Announcements',       path: '/notices',        icon: BellRing },
-    { label: 'Proposals & Voting',  path: '/proposals',      icon: Vote },
-    { label: 'Audit Trail',         path: '/audit-trail',    icon: Shield },
-    { label: 'Analytics',           path: '/analytics',      icon: BarChart3,  badge: 'Super' },  // exclusive
-    { label: 'Reports',             path: '/reports',        icon: FileText },
-    { label: 'Profile',             path: '/profile',        icon: Settings },
-  ],
-  COMMUNITY_ADMIN: [
-    { label: 'Dashboard',           path: '/',               icon: LayoutDashboard },
-    { label: 'Apartments',          path: '/villas',         icon: Home },
-    { label: 'Residents',           path: '/residents-directory', icon: Users },
-    { label: 'Maintenance & Billing', path: '/maintenance', icon: CreditCard },
-    { label: 'Complaints',          path: '/complaints',     icon: AlertCircle },
-    { label: 'Vehicles',            path: '/vehicles',       icon: Car },
-    { label: 'Visitors',            path: '/visitors',       icon: QrCode },
-    { label: 'Announcements',       path: '/notices',        icon: BellRing },
-    { label: 'Proposals & Voting',  path: '/proposals',      icon: Vote },
-    { label: 'Audit Trail',         path: '/audit-trail',    icon: Shield },
-    { label: 'Property Listings',   path: '/listings',       icon: Tag },
-    { label: 'Reports',             path: '/reports',        icon: FileText },
-  ],
-  RESIDENT: [
-    { label: 'Dashboard',           path: '/',               icon: LayoutDashboard },
-    { label: 'My Maintenance',      path: '/maintenance',    icon: CreditCard },
-    { label: 'My Visitors',         path: '/visitors',       icon: QrCode },
-    { label: 'My Complaints',       path: '/complaints',     icon: AlertCircle },
-    { label: 'Notice Board',        path: '/notices',        icon: Bell },
-    { label: 'Community Events',    path: '/events',         icon: Calendar },
-    { label: 'Proposals & Voting',  path: '/proposals',      icon: Vote },
-    { label: 'Properties for Sale', path: '/listings',       icon: Tag },
-    { label: 'My Vehicles',         path: '/vehicles',       icon: Car },
-    { label: 'Profile & Family',    path: '/profile',        icon: Settings },
-  ],
-  SECURITY_GUARD: [
-    { label: 'Dashboard',           path: '/',               icon: LayoutDashboard },
-    { label: 'Gate Security',       path: '/security',       icon: Shield },
-    { label: 'Visitor Logs',        path: '/visitors',       icon: QrCode },
-    { label: 'Deliveries',          path: '/visitors',       icon: Truck },
-    { label: 'Notice Board',        path: '/notices',        icon: Bell },
-    { label: 'Profile',             path: '/profile',        icon: Settings },
-  ],
-};
-
-
-const ROLE_LABEL = {
-  SUPER_ADMIN: 'Super Admin',
-  COMMUNITY_ADMIN: 'Community Admin',
-  RESIDENT: 'Resident',
-  SECURITY_GUARD: 'Security Guard',
-};
-
-const ROLE_COLOR = {
-  SUPER_ADMIN: 'bg-purple-100 text-purple-700',
-  COMMUNITY_ADMIN: 'bg-blue-100 text-blue-700',
-  RESIDENT: 'bg-emerald-100 text-emerald-700',
-  SECURITY_GUARD: 'bg-amber-100 text-amber-700',
-};
-
 export const Sidebar = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const role = user?.role || 'RESIDENT';
-  const navItems = NAV_CONFIG[role] || NAV_CONFIG.RESIDENT;
 
-  // Deduplicate by path
-  const seen = new Set();
-  const filteredItems = navItems.filter(item => {
-    const key = item.label;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const navItems = [
+    { label: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT', 'SECURITY_GUARD'] },
+    { label: 'Gate Security Portal', path: '/security', icon: Shield, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'SECURITY_GUARD'] },
+    { label: 'Resident Directory', path: '/residents-directory', icon: Users, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN'] },
+    { label: 'Visitor Pass & Logs', path: '/visitors', icon: QrCode, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT', 'SECURITY_GUARD'] },
+    { label: 'Helpdesk Complaints', path: '/complaints', icon: AlertCircle, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT'] },
+    { label: 'Notice Board', path: '/notices', icon: Bell, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT', 'SECURITY_GUARD'] },
+    { label: 'Maintenance Bills', path: '/maintenance', icon: CreditCard, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT'] },
+    { label: 'Community Events', path: '/events', icon: Calendar, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT'] },
+    { label: 'Villas & Directory', path: '/villas', icon: Home, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN'] },
+    { label: 'Vehicles & Parking', path: '/vehicles', icon: Car, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT', 'SECURITY_GUARD'] },
+    { label: 'Profile & Family', path: '/profile', icon: Settings, roles: ['SUPER_ADMIN', 'COMMUNITY_ADMIN', 'RESIDENT', 'SECURITY_GUARD'] }
+  ];
 
-  const initials = user?.name
-    ? user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'U';
+  const filteredItems = navItems.filter(item => item.roles.includes(role));
 
   return (
-    <aside className="ch-sidebar">
-      {/* Brand */}
-      <div className="ch-sidebar-brand">
-        <Link to="/" className="ch-brand-link">
-          <div className="ch-brand-icon">
-            <Building2 size={22} />
-          </div>
-          <div>
-            <span className="ch-brand-name">CommunityHub</span>
-            <span className="ch-brand-tagline">Smart Living, Better Together</span>
-          </div>
-        </Link>
-      </div>
+    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-emerald-100/80 dark:border-slate-800 flex flex-col justify-between hidden md:flex min-h-[calc(100vh-65px)] transition-colors">
+      <div className="p-4 space-y-1">
+        <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Navigation ({role.replace('_', ' ')})
+        </div>
 
-      {/* Nav */}
-      <nav className="ch-sidebar-nav">
         {filteredItems.map(item => {
           const Icon = item.icon;
           return (
             <NavLink
-              key={item.label}
+              key={item.path}
               to={item.path}
-              end={item.path === '/'}
               className={({ isActive }) =>
-                `ch-nav-item${isActive ? ' ch-nav-item--active' : ''}`
+                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                  isActive
+                    ? 'bg-emerald-700 text-white shadow-lg shadow-emerald-700/25'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800/80 hover:text-emerald-800 dark:hover:text-white'
+                }`
               }
             >
-              <Icon size={18} className="ch-nav-icon" />
-              <span style={{ flex: 1 }}>{item.label}</span>
-              {item.badge && role === 'SUPER_ADMIN' && (
-                <span style={{
-                  fontSize: 9, fontWeight: 800, padding: '1px 5px',
-                  borderRadius: 20, background: '#7c3aed22',
-                  color: '#a78bfa', border: '1px solid #7c3aed44',
-                  letterSpacing: '0.3px', lineHeight: 1.4
-                }}>S</span>
-              )}
+              <Icon className="w-5 h-5" />
+              <span>{item.label}</span>
             </NavLink>
           );
         })}
-      </nav>
+      </div>
 
-      {/* Spacer */}
-      <div className="ch-sidebar-spacer" />
-
-      {/* User Profile Footer */}
-      <div className="ch-sidebar-footer">
-        {/* Need Help */}
-        <div className="ch-help-card">
-          <div className="ch-help-header">
-            <Headphones size={16} className="ch-help-icon" />
-            <span className="ch-help-title">Need Help?</span>
-          </div>
-          <p className="ch-help-sub">We're here to help you</p>
-          <button className="ch-help-btn">Contact Support</button>
+      <div className="p-4 m-3 rounded-2xl bg-emerald-50/70 dark:bg-slate-800/60 border border-emerald-100 dark:border-slate-700/60">
+        <div className="flex items-center gap-2 mb-1 text-emerald-700 dark:text-emerald-400 font-bold text-xs">
+          <Shield className="w-4 h-4" />
+          <span>Active Scope</span>
         </div>
-
-        {/* User Info */}
-        <div className="ch-user-row">
-          <div className="ch-user-avatar" style={role === 'SUPER_ADMIN' ? { background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' } : {}}>
-            {initials}
-          </div>
-          <div className="ch-user-info">
-            <span className="ch-user-name">{user?.name || 'User'}</span>
-            <span className={`ch-user-role ${ROLE_COLOR[role]}`}>
-              {role === 'SUPER_ADMIN' && '👑 '}{ROLE_LABEL[role]}
-            </span>
-          </div>
-          <ChevronDown size={14} className="ch-user-chevron" />
-        </div>
+        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+          {user?.community?.name || 'Super Admin Platform Mode'}
+        </p>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+          Role: {role}
+        </p>
       </div>
     </aside>
   );

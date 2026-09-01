@@ -7,15 +7,14 @@ const api = axios.create({
   }
 });
 
-// Attach JWT Token to requests — reads from sessionStorage (tab-isolated)
+// Attach JWT Token to requests
 api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem('communityhub_token');
+  const token = localStorage.getItem('communityhub_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 }, (error) => Promise.reject(error));
-
 
 export default api;
 
@@ -52,18 +51,15 @@ export const complaintService = {
 export const noticeService = {
   createNotice: (data) => api.post('/notices', data),
   getNotices: () => api.get('/notices'),
-  updateNotice: (id, data) => api.put(`/notices/${id}`, data),
   deleteNotice: (id) => api.delete(`/notices/${id}`)
 };
 
 export const paymentService = {
   getPayments: () => api.get('/payments'),
-  getSummary: () => api.get('/payments/summary'),
   generateBills: (data) => api.post('/payments/generate', data),
   createCustomBill: (data) => api.post('/payments/custom', data),
   updateBill: (id, data) => api.put(`/payments/${id}`, data),
   deleteBill: (id) => api.delete(`/payments/${id}`),
-  purgePhantomBills: () => api.delete('/payments/purge-phantom'),
   createOrder: (paymentId, customKeyId, customKeySecret) => api.post('/payments/create-order', { paymentId, customKeyId, customKeySecret }),
   verifyPayment: (data) => api.post('/payments/verify', data)
 };
@@ -93,26 +89,3 @@ export const analyticsService = {
   getDatabaseExplorer: () => api.get('/analytics/database'),
   clearData: () => api.post('/analytics/clear-data')
 };
-
-export const proposalService = {
-  getProposals: (params) => api.get('/proposals', { params }),
-  getProposalById: (id) => api.get(`/proposals/${id}`),
-  createProposal: (data) => api.post('/proposals', data),
-  castVote: (id, optionIndex) => api.post(`/proposals/${id}/vote`, { optionIndex }),
-  updateStatus: (id, status) => api.put(`/proposals/${id}/status`, { status }),
-  deleteProposal: (id) => api.delete(`/proposals/${id}`)
-};
-
-export const auditService = {
-  getLogs: (params) => api.get('/audit', { params })
-};
-
-export const listingService = {
-  getListings: ()             => api.get('/listings'),
-  getListing: (id)            => api.get(`/listings/${id}`),
-  createListing: (data)       => api.post('/listings', data),
-  updateListing: (id, data)   => api.put(`/listings/${id}`, data),
-  deleteListing: (id)         => api.delete(`/listings/${id}`),
-  expressInterest: (id)       => api.post(`/listings/${id}/interest`)
-};
-
