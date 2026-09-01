@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import { useSocket } from '../../context/SocketContext';
-import { Sun, Moon, Bell, ShieldAlert, LogOut, User, Search, Maximize2 } from 'lucide-react';
+import { Bell, ShieldAlert, LogOut, User, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const ROLE_WELCOME = {
@@ -27,7 +26,6 @@ function getTodayString() {
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const { notifications, triggerSOS } = useSocket();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -99,10 +97,6 @@ export const Navbar = () => {
           📅 {getTodayString()}
         </div>
 
-        {/* Theme toggle */}
-        <button onClick={toggleTheme} className="ch-icon-btn" title="Toggle theme">
-          {theme === 'dark' ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} />}
-        </button>
 
         {/* SOS */}
         <button

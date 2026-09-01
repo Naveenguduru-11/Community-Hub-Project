@@ -26,21 +26,9 @@
   --ch-navbar-border: #e8eaf0;
 }
 
-.dark {
-  --ch-sidebar-bg: #0f172a;
-  --ch-sidebar-border: #1e293b;
-  --ch-nav-hover-bg: #1e293b;
-  --ch-nav-text: #94a3b8;
-  --ch-brand-name: #f1f5f9;
-  --ch-body-bg: #060b17;
-  --ch-card-bg: #0f172a;
-  --ch-card-border: #1e293b;
-  --ch-text-primary: #f1f5f9;
-  --ch-text-muted: #94a3b8;
-  --ch-text-xs: #64748b;
-  --ch-navbar-bg: #0f172a;
-  --ch-navbar-border: #1e293b;
-}
+
+/* Dark mode removed — light-only UI */
+
 
 /* ─────────────────────────────────────────────
    BASE

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { paymentService, communityService, villaService } from '../services/api';
+import { paymentService, communityService, villaService, authService } from '../services/api';
 import { RazorpayModal } from '../components/payments/RazorpayModal';
 import {
   CreditCard, CheckCircle2, AlertCircle, Plus, Edit2,
@@ -193,6 +193,11 @@ export const MaintenancePage = () => {
     dueDate: new Date(Date.now() + 15*86400000).toISOString().split('T')[0]
   });
 
+  // Resident selection for billing
+  const [residentList, setResidentList]             = useState([]);
+  const [selectedResidents, setSelectedResidents]   = useState(new Set());
+  const [customSelectedRes, setCustomSelectedRes]   = useState(new Set());
+
   // Edit form
   const [editForm, setEditForm] = useState({ title:'', billType:'MAINTENANCE', month:'', amount:'', dueDate:'', status:'PENDING', adminNotes:'' });
 
@@ -231,6 +236,12 @@ export const MaintenancePage = () => {
     // When admin loads the page, silently purge any phantom auto-seeded bills from the DB
     if (isAdmin) {
       paymentService.purgePhantomBills().catch(() => {});
+      // Fetch residents list for billing selection
+      authService.getAllResidents().then(res => {
+        const list = res.data.residents || res.data.users || [];
+        setResidentList(list);
+        setSelectedResidents(new Set(list.map(r => r._id)));
+      }).catch(() => {});
     }
     fetchData();
   }, [fetchData]);
@@ -248,8 +259,13 @@ export const MaintenancePage = () => {
   // ── Admin: generate bulk bills ──
   const handleGenerateBills = async (e) => {
     e.preventDefault();
+    if (selectedResidents.size === 0) { alert('Please select at least one resident.'); return; }
     try {
-      const res = await paymentService.generateBills(generateForm);
+      const payload = {
+        ...generateForm,
+        residentIds: [...selectedResidents]
+      };
+      const res = await paymentService.generateBills(payload);
       alert(`✅ Generated ${res.data.count || 0} maintenance bills successfully!`);
       setShowGenerateModal(false);
       fetchData();
@@ -259,11 +275,16 @@ export const MaintenancePage = () => {
   // ── Admin: custom bill ──
   const handleCustomBill = async (e) => {
     e.preventDefault();
+    if (customSelectedRes.size === 0) { alert('Please select at least one resident.'); return; }
     try {
-      await paymentService.createCustomBill(customForm);
-      alert('✅ Custom bill issued!');
+      const targets = residentList.filter(r => customSelectedRes.has(r._id));
+      await Promise.all(targets.map(r =>
+        paymentService.createCustomBill({ ...customForm, residentId: r._id })
+      ));
+      alert(`✅ Custom bill issued to ${targets.length} resident(s)!`);
       setShowCustomModal(false);
       setCustomForm({ title:'', billType:'MAINTENANCE', month:generateForm.month, amount:'', dueDate:'', villaId:'', adminNotes:'' });
+      setCustomSelectedRes(new Set());
       fetchData();
     } catch { alert('Failed to issue custom bill.'); }
   };
@@ -659,13 +680,13 @@ export const MaintenancePage = () => {
       {/* Generate Bulk Bills Modal */}
       {showGenerateModal && (
         <div className="ch-modal-overlay" onClick={e => e.target===e.currentTarget && setShowGenerateModal(false)}>
-          <div className="ch-modal" style={{ maxWidth:440 }}>
+          <div className="ch-modal" style={{ maxWidth: 520 }}>
             <div className="ch-modal-header">
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <span style={{ background:'#10b98122', padding:'6px 8px', borderRadius:8, display:'flex' }}><TrendingUp size={18} color="#34d399" /></span>
                 <div>
                   <h2 className="ch-modal-title">Generate Bulk Maintenance Bills</h2>
-                  <p style={{ fontSize:12, color:'var(--ch-text-muted)', marginTop:2 }}>Issues bills to all occupied villas in your community</p>
+                  <p style={{ fontSize:12, color:'var(--ch-text-muted)', marginTop:2 }}>Issues bills to selected residents in your community</p>
                 </div>
               </div>
               <button className="ch-modal-close" onClick={() => setShowGenerateModal(false)}><X size={18}/></button>
@@ -677,7 +698,7 @@ export const MaintenancePage = () => {
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                 <div className="ch-form-group">
-                  <label className="ch-form-label">Amount (₹) per Villa</label>
+                  <label className="ch-form-label">Amount (₹) per Resident</label>
                   <input id="gen-amount" type="number" min={1} className="ch-form-input" value={generateForm.amount} onChange={e => setGenerateForm(f=>({...f, amount:e.target.value}))} required />
                 </div>
                 <div className="ch-form-group">
@@ -685,25 +706,79 @@ export const MaintenancePage = () => {
                   <input id="gen-due" type="date" className="ch-form-input" value={generateForm.dueDate} onChange={e => setGenerateForm(f=>({...f, dueDate:e.target.value}))} required />
                 </div>
               </div>
+
+              {/* Resident Selection */}
+              <div className="ch-form-group">
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                  <label className="ch-form-label" style={{ margin:0 }}>
+                    Select Residents
+                    <span style={{ marginLeft:8, fontSize:11, background:'#6366f122', color:'#818cf8', padding:'2px 8px', borderRadius:99, fontWeight:700 }}>
+                      {selectedResidents.size}/{residentList.length} selected
+                    </span>
+                  </label>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button type="button"
+                      onClick={() => setSelectedResidents(new Set(residentList.map(r => r._id)))}
+                      style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:7, border:'1px solid #10b98133', background:'#10b98111', color:'#34d399', cursor:'pointer' }}
+                    >Select All</button>
+                    <button type="button"
+                      onClick={() => setSelectedResidents(new Set())}
+                      style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:7, border:'1px solid #ef444433', background:'#ef444411', color:'#f87171', cursor:'pointer' }}
+                    >Clear</button>
+                  </div>
+                </div>
+                <div style={{ maxHeight:200, overflowY:'auto', border:'1px solid var(--ch-card-border)', borderRadius:10, padding:'4px 0' }}>
+                  {residentList.length === 0 ? (
+                    <div style={{ padding:'16px', textAlign:'center', color:'var(--ch-text-muted)', fontSize:12 }}>Loading residents…</div>
+                  ) : residentList.map(r => (
+                    <label key={r._id} style={{
+                      display:'flex', alignItems:'center', gap:10, padding:'8px 14px',
+                      cursor:'pointer', borderBottom:'1px solid var(--ch-card-border)',
+                      background: selectedResidents.has(r._id) ? 'var(--ch-card-bg)' : 'transparent',
+                      transition:'background 0.15s'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedResidents.has(r._id)}
+                        onChange={e => {
+                          const next = new Set(selectedResidents);
+                          if (e.target.checked) next.add(r._id); else next.delete(r._id);
+                          setSelectedResidents(next);
+                        }}
+                        style={{ width:15, height:15, accentColor:'#6366f1', cursor:'pointer', flexShrink:0 }}
+                      />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:700, fontSize:13, color:'var(--ch-text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+                        <div style={{ fontSize:11, color:'var(--ch-text-muted)' }}>{r.villaNumber ? `Villa ${r.villaNumber} · ` : ''}{r.email}</div>
+                      </div>
+                      {selectedResidents.has(r._id) && (
+                        <span style={{ fontSize:10, background:'#10b98122', color:'#34d399', padding:'2px 7px', borderRadius:99, fontWeight:700, flexShrink:0 }}>Selected</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
                 <button type="button" className="ch-btn-secondary" onClick={() => setShowGenerateModal(false)}>Cancel</button>
-                <button type="submit" id="gen-submit" className="ch-btn-primary">Generate Bills</button>
+                <button type="submit" id="gen-submit" className="ch-btn-primary" disabled={selectedResidents.size === 0} style={{ opacity: selectedResidents.size === 0 ? 0.5 : 1 }}>
+                  Generate {selectedResidents.size > 0 ? `(${selectedResidents.size})` : ''} Bills
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Issue Custom Bill Modal */}
       {showCustomModal && (
         <div className="ch-modal-overlay" onClick={e => e.target===e.currentTarget && setShowCustomModal(false)}>
-          <div className="ch-modal" style={{ maxWidth:520 }}>
+          <div className="ch-modal" style={{ maxWidth:540 }}>
             <div className="ch-modal-header">
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <span style={{ background:'#6366f122', padding:'6px 8px', borderRadius:8, display:'flex' }}><Plus size={18} color="#818cf8" /></span>
                 <div>
                   <h2 className="ch-modal-title">Issue Custom Bill</h2>
-                  <p style={{ fontSize:12, color:'var(--ch-text-muted)', marginTop:2 }}>Issue a bill to a specific villa for any charge</p>
+                  <p style={{ fontSize:12, color:'var(--ch-text-muted)', marginTop:2 }}>Issue a bill to one or more residents for any charge</p>
                 </div>
               </div>
               <button className="ch-modal-close" onClick={() => setShowCustomModal(false)}><X size={18}/></button>
@@ -713,27 +788,70 @@ export const MaintenancePage = () => {
                 <label className="ch-form-label">Bill Title *</label>
                 <input id="custom-title" className="ch-form-input" placeholder="e.g. EV Charging Fee – August 2026" value={customForm.title} onChange={e=>setCustomForm(f=>({...f,title:e.target.value}))} required />
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <div className="ch-form-group">
-                  <label className="ch-form-label">Bill Type</label>
-                  <select id="custom-type" className="ch-form-input ch-form-select" value={customForm.billType} onChange={e=>setCustomForm(f=>({...f,billType:e.target.value}))}>
-                    <option value="MAINTENANCE">Maintenance</option>
-                    <option value="UTILITY">Utility (Water/Power)</option>
-                    <option value="EV_CHARGING">EV Charging</option>
-                    <option value="EVENT_FEE">Clubhouse / Event Fee</option>
-                    <option value="REPAIR_FINE">Repair Fine</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+              <div className="ch-form-group">
+                <label className="ch-form-label">Bill Type</label>
+                <select id="custom-type" className="ch-form-input ch-form-select" value={customForm.billType} onChange={e=>setCustomForm(f=>({...f,billType:e.target.value}))}>
+                  <option value="MAINTENANCE">Maintenance</option>
+                  <option value="UTILITY">Utility (Water/Power)</option>
+                  <option value="EV_CHARGING">EV Charging</option>
+                  <option value="EVENT_FEE">Clubhouse / Event Fee</option>
+                  <option value="REPAIR_FINE">Repair Fine</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+
+              {/* Multi-Resident Selection */}
+              <div className="ch-form-group">
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                  <label className="ch-form-label" style={{ margin:0 }}>
+                    Select Residents *
+                    <span style={{ marginLeft:8, fontSize:11, background:'#6366f122', color:'#818cf8', padding:'2px 8px', borderRadius:99, fontWeight:700 }}>
+                      {customSelectedRes.size}/{residentList.length} selected
+                    </span>
+                  </label>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button type="button"
+                      onClick={() => setCustomSelectedRes(new Set(residentList.map(r => r._id)))}
+                      style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:7, border:'1px solid #10b98133', background:'#10b98111', color:'#34d399', cursor:'pointer' }}
+                    >Select All</button>
+                    <button type="button"
+                      onClick={() => setCustomSelectedRes(new Set())}
+                      style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:7, border:'1px solid #ef444433', background:'#ef444411', color:'#f87171', cursor:'pointer' }}
+                    >Clear</button>
+                  </div>
                 </div>
-                <div className="ch-form-group">
-                  <label className="ch-form-label">Target Villa *</label>
-                  <select id="custom-villa" className="ch-form-input ch-form-select" value={customForm.villaId} onChange={e=>setCustomForm(f=>({...f,villaId:e.target.value}))} required>
-                    <option value="">Select Villa</option>
-                    {villas.map(v => <option key={v._id} value={v._id}>{v.villaNumber}{v.owner?.name ? ` (${v.owner.name})` : ''}</option>)}
-                    {!villas.length && <option value="villa_101">V-101 (Demo)</option>}
-                  </select>
+                <div style={{ maxHeight:180, overflowY:'auto', border:'1px solid var(--ch-card-border)', borderRadius:10, padding:'4px 0' }}>
+                  {residentList.length === 0 ? (
+                    <div style={{ padding:'16px', textAlign:'center', color:'var(--ch-text-muted)', fontSize:12 }}>Loading residents…</div>
+                  ) : residentList.map(r => (
+                    <label key={r._id} style={{
+                      display:'flex', alignItems:'center', gap:10, padding:'7px 14px',
+                      cursor:'pointer', borderBottom:'1px solid var(--ch-card-border)',
+                      background: customSelectedRes.has(r._id) ? 'var(--ch-card-bg)' : 'transparent',
+                      transition:'background 0.15s'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={customSelectedRes.has(r._id)}
+                        onChange={e => {
+                          const next = new Set(customSelectedRes);
+                          if (e.target.checked) next.add(r._id); else next.delete(r._id);
+                          setCustomSelectedRes(next);
+                        }}
+                        style={{ width:15, height:15, accentColor:'#6366f1', cursor:'pointer', flexShrink:0 }}
+                      />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:700, fontSize:13, color:'var(--ch-text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+                        <div style={{ fontSize:11, color:'var(--ch-text-muted)' }}>{r.villaNumber ? `Villa ${r.villaNumber} · ` : ''}{r.email}</div>
+                      </div>
+                      {customSelectedRes.has(r._id) && (
+                        <span style={{ fontSize:10, background:'#6366f122', color:'#818cf8', padding:'2px 7px', borderRadius:99, fontWeight:700, flexShrink:0 }}>Selected</span>
+                      )}
+                    </label>
+                  ))}
                 </div>
               </div>
+
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
                 <div className="ch-form-group">
                   <label className="ch-form-label">Amount (₹) *</label>
@@ -754,7 +872,9 @@ export const MaintenancePage = () => {
               </div>
               <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
                 <button type="button" className="ch-btn-secondary" onClick={() => setShowCustomModal(false)}>Cancel</button>
-                <button type="submit" id="custom-submit" className="ch-btn-primary">Issue Bill</button>
+                <button type="submit" id="custom-submit" className="ch-btn-primary" disabled={customSelectedRes.size === 0} style={{ opacity: customSelectedRes.size === 0 ? 0.5 : 1 }}>
+                  Issue Bill{customSelectedRes.size > 1 ? ` to ${customSelectedRes.size} residents` : customSelectedRes.size === 1 ? ' to 1 resident' : ''}
+                </button>
               </div>
             </form>
           </div>

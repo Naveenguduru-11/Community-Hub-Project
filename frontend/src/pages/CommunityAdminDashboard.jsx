@@ -196,9 +196,16 @@ export const CommunityAdminDashboard = () => {
   /* ── Derived (real data only, no fake fallbacks) ── */
   const totalVillas    = stats?.totalVillas    || 0;
   const totalResidents = stats?.totalResidents || 0;
-  const pendingRevenue = stats?.pendingRevenue || 0;
-  const paidRevenue    = stats?.totalRevenueCollected || 0;
-  const overdueRevenue = stats?.overdueRevenue || 0;
+
+  // Compute revenue from payments array directly (more reliable than analytics API)
+  const paidFromPayments    = payments.filter(p => p.status === 'PAID').reduce((s, p) => s + (p.totalAmount || 0), 0);
+  const pendingFromPayments = payments.filter(p => p.status === 'PENDING').reduce((s, p) => s + (p.totalAmount || 0), 0);
+  const overdueFromPayments = payments.filter(p => p.status === 'OVERDUE').reduce((s, p) => s + (p.totalAmount || 0), 0);
+
+  // Prefer stats API if it has data, fall back to computed values from payments
+  const paidRevenue    = (stats?.totalRevenueCollected || 0) || paidFromPayments;
+  const pendingRevenue = (stats?.pendingRevenue        || 0) || pendingFromPayments;
+  const overdueRevenue = (stats?.overdueRevenue        || 0) || overdueFromPayments;
   const totalRevenue   = paidRevenue + pendingRevenue + overdueRevenue;
   const paidPct        = totalRevenue ? Math.round((paidRevenue    / totalRevenue) * 100) : 0;
   const pendingPct     = totalRevenue ? Math.round((pendingRevenue / totalRevenue) * 100) : 0;
@@ -306,20 +313,20 @@ export const CommunityAdminDashboard = () => {
             <span className="ch-section-title">Maintenance Dues</span>
             <Link to="/residents-directory" className="ch-view-all">View Details</Link>
           </div>
-          {totalRevenue === 0 && !loading ? (
-            <div className="ch-empty"><IndianRupee size={26} style={{ opacity: 0.2, margin: '0 auto 6px' }} /><p>No billing data yet</p></div>
+          {loading ? (
+            <div className="ch-empty"><IndianRupee size={26} style={{ opacity: 0.2, margin: '0 auto 6px', animation: 'pulse 1.5s infinite' }} /><p>Loading…</p></div>
           ) : (
             <div className="ch-donut-wrap">
               <DonutChart size={110} strokeWidth={18} segments={[
-                { value: paidPct,    color: '#10b981' },
-                { value: pendingPct, color: '#f59e0b' },
-                { value: overduePct, color: '#ef4444' },
+                { value: totalRevenue === 0 ? 1 : paidPct,    color: totalRevenue === 0 ? '#e2e8f0' : '#10b981' },
+                { value: totalRevenue === 0 ? 0 : pendingPct, color: '#f59e0b' },
+                { value: totalRevenue === 0 ? 0 : overduePct, color: '#ef4444' },
               ]} />
               <div className="ch-donut-legend">
                 <div className="ch-legend-row"><span className="ch-legend-label"><span className="ch-legend-dot" style={{ background: '#10b981' }} />Paid</span><span className="ch-legend-value">{fmtINR(paidRevenue)} ({paidPct}%)</span></div>
                 <div className="ch-legend-row"><span className="ch-legend-label"><span className="ch-legend-dot" style={{ background: '#f59e0b' }} />Pending</span><span className="ch-legend-value">{fmtINR(pendingRevenue)} ({pendingPct}%)</span></div>
                 <div className="ch-legend-row"><span className="ch-legend-label"><span className="ch-legend-dot" style={{ background: '#ef4444' }} />Overdue</span><span className="ch-legend-value">{fmtINR(overdueRevenue)} ({overduePct}%)</span></div>
-                <div className="ch-donut-total"><div className="ch-donut-total-label">Total</div><div className="ch-donut-total-value">{fmtINR(totalRevenue)}</div></div>
+                <div className="ch-donut-total"><div className="ch-donut-total-label">Total</div><div className="ch-donut-total-value">{totalRevenue === 0 ? '₹ 0' : fmtINR(totalRevenue)}</div></div>
               </div>
             </div>
           )}
@@ -383,22 +390,20 @@ export const CommunityAdminDashboard = () => {
         </div>
       </div>
 
-      {/* ── CTA Banner ── */}
-      <div className="ch-cta-banner">
-        <div className="ch-cta-phone">💳</div>
-        <div className="ch-cta-body">
-          <div className="ch-cta-title">Make Payments Easy</div>
-          <div className="ch-cta-sub">Collect maintenance dues securely via UPI, Cards or Net Banking.</div>
+      {/* ── CTA Banner — only shown when there are pending dues ── */}
+      {pendingRevenue > 0 && (
+        <div className="ch-cta-banner">
+          <div className="ch-cta-phone">💳</div>
+          <div className="ch-cta-body">
+            <div className="ch-cta-title">Pending Dues Need Attention</div>
+            <div className="ch-cta-sub">{fmtINR(pendingRevenue)} outstanding — remind residents to pay via UPI, Cards or Net Banking.</div>
+          </div>
+          <button className="ch-cta-btn" onClick={() => navigate('/maintenance')}>
+            View Dues <ArrowRight size={15} />
+          </button>
+          <div className="ch-cta-building">🏢</div>
         </div>
-        <button className="ch-cta-btn" onClick={() => {
-          const pending = payments.find(p => p.status === 'PENDING' || p.status === 'OVERDUE');
-          if (pending) setSelectedBillForPayment(pending);
-          else alert('No pending payments found.');
-        }}>
-          Make a Payment <ArrowRight size={15} />
-        </button>
-        <div className="ch-cta-building">🏢</div>
-      </div>
+      )}
 
       {/* ════════════════════════════════════════════════════════ */}
       {/* ── MODALS ────────────────────────────────────────────── */}
