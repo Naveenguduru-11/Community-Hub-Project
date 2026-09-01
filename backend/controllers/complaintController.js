@@ -83,14 +83,21 @@ exports.deleteComplaint = async (req, res, next) => {
   }
 };
 
-// @desc Get All Complaints
+// @desc Get Complaints (Filtered by resident or community)
 // @route GET /api/complaints
 exports.getComplaints = async (req, res, next) => {
   try {
     const isConnected = mongoose.connection.readyState === 1;
 
+    let filter = {};
+    if (req.user?.role === 'RESIDENT') {
+      filter = { raisedBy: req.user._id };
+    } else if (req.user?.community && mongoose.Types.ObjectId.isValid(req.user.community)) {
+      filter = { community: req.user.community };
+    }
+
     if (isConnected) {
-      const complaints = await Complaint.find()
+      const complaints = await Complaint.find(filter)
         .populate('raisedBy', 'name phone email')
         .populate('villa', 'villaNumber block')
         .sort({ createdAt: -1 });
@@ -98,13 +105,21 @@ exports.getComplaints = async (req, res, next) => {
       const uniqueComplaints = Array.from(new Map(complaints.map(item => [item._id.toString(), item])).values());
       return res.status(200).json({ success: true, count: uniqueComplaints.length, complaints: uniqueComplaints });
     } else {
-      const uniqueComplaints = Array.from(new Map(memoryComplaints.map(item => [item._id, item])).values());
+      let filtered = memoryComplaints;
+      if (req.user?.role === 'RESIDENT') {
+        filtered = memoryComplaints.filter(c => {
+          const raisedById = c.raisedBy?._id?.toString() || c.raisedBy?.toString();
+          return raisedById === req.user._id?.toString();
+        });
+      }
+      const uniqueComplaints = Array.from(new Map(filtered.map(item => [item._id, item])).values());
       return res.status(200).json({ success: true, count: uniqueComplaints.length, complaints: uniqueComplaints });
     }
   } catch (error) {
     next(error);
   }
 };
+
 
 // @desc Update Complaint Status / Assignment / Resolution Notes
 // @route PUT /api/complaints/:id

@@ -1,563 +1,830 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { paymentService, communityService, villaService } from '../services/api';
 import { RazorpayModal } from '../components/payments/RazorpayModal';
-import { 
-  CreditCard, CheckCircle2, AlertCircle, Plus, Edit2, 
-  Trash2, X, Settings, DollarSign, Zap, Wrench 
+import {
+  CreditCard, CheckCircle2, AlertCircle, Plus, Edit2,
+  Trash2, Settings, Receipt, Users, TrendingUp,
+  TrendingDown, Clock, X, BarChart2, RefreshCw,
+  ChevronDown, ChevronUp, Search, Filter, Zap, Wrench,
+  Home, IndianRupee
 } from 'lucide-react';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+
+const STATUS_STYLE = {
+  PAID:    { bg: '#10b98118', text: '#34d399', border: '#10b98144', label: 'Paid'    },
+  PENDING: { bg: '#f59e0b18', text: '#fbbf24', border: '#f59e0b44', label: 'Pending' },
+  OVERDUE: { bg: '#ef444418', text: '#f87171', border: '#ef444444', label: 'Overdue' },
+  FAILED:  { bg: '#64748b18', text: '#94a3b8', border: '#64748b44', label: 'Failed'  },
+};
+
+const BILL_TYPE_ICON = { MAINTENANCE: Home, UTILITY: Zap, EVENT_FEE: Receipt, REPAIR_FINE: Wrench, EV_CHARGING: Zap, OTHER: Receipt, AMENITY: Home };
+
+// Demo data used when admin has issued bills (memory fallback for UI preview)
+const DEMO_SUMMARY = [
+  {
+    resident: { _id: 'r1', name: 'Ravi Kumar',   email: 'ravi@example.com',  villaNumber: 'V-101' },
+    villa:    { villaNumber: 'V-101', block: 'Block A' },
+    totalDue: 4500, totalPaid: 1500,
+    bills: [
+      { _id: 'b1', title: 'Monthly Maintenance Fee - August 2026', billType: 'MAINTENANCE', month: 'August 2026', totalAmount: 4500, status: 'PENDING', dueDate: new Date(Date.now() + 5*86400000), receiptNumber: 'INV-001' },
+      { _id: 'b2', title: 'Clubhouse Event Fee',                   billType: 'EVENT_FEE',   month: 'August 2026', totalAmount: 1500, status: 'PAID',    dueDate: new Date(Date.now() - 2*86400000), paidDate: new Date(Date.now() - 1*86400000), receiptNumber: 'INV-002' },
+    ]
+  },
+  {
+    resident: { _id: 'r2', name: 'Priya Sharma', email: 'priya@example.com', villaNumber: 'V-102' },
+    villa:    { villaNumber: 'V-102', block: 'Block A' },
+    totalDue: 0, totalPaid: 6000,
+    bills: [
+      { _id: 'b3', title: 'Monthly Maintenance Fee - August 2026', billType: 'MAINTENANCE', month: 'August 2026', totalAmount: 4500, status: 'PAID', dueDate: new Date(Date.now() - 5*86400000), paidDate: new Date(Date.now() - 3*86400000), receiptNumber: 'INV-003', razorpayPaymentId: 'pay_rzp_001' },
+      { _id: 'b4', title: 'EV Charging Station',                   billType: 'EV_CHARGING', month: 'August 2026', totalAmount: 1500, status: 'PAID', dueDate: new Date(Date.now() - 5*86400000), paidDate: new Date(Date.now() - 2*86400000), receiptNumber: 'INV-004', razorpayPaymentId: 'pay_rzp_002' },
+    ]
+  },
+  {
+    resident: { _id: 'r3', name: 'Ajay Nair',    email: 'ajay@example.com',  villaNumber: 'V-103' },
+    villa:    { villaNumber: 'V-103', block: 'Block B' },
+    totalDue: 5500, totalPaid: 0,
+    bills: [
+      { _id: 'b5', title: 'Monthly Maintenance Fee - August 2026', billType: 'MAINTENANCE', month: 'August 2026', totalAmount: 4500, status: 'OVERDUE', dueDate: new Date(Date.now() - 3*86400000), receiptNumber: 'INV-005' },
+      { _id: 'b6', title: 'Water Utility Charge',                  billType: 'UTILITY',     month: 'August 2026', totalAmount: 1000, status: 'OVERDUE', dueDate: new Date(Date.now() - 3*86400000), receiptNumber: 'INV-006' },
+    ]
+  },
+];
+
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function StatCard({ icon: Icon, label, value, color, sub }) {
+  return (
+    <div className="maint-stat-card" style={{ '--sc': color }}>
+      <div className="maint-stat-icon"><Icon size={18} color={color} /></div>
+      <div>
+        <div className="maint-stat-val">{value}</div>
+        <div className="maint-stat-label">{label}</div>
+        {sub && <div className="maint-stat-sub">{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Resident row card in the admin payment history table
+function ResidentRow({ entry, onEditBill, onDeleteBill }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDue = entry.totalDue > 0;
+
+  return (
+    <div className={`maint-res-row ${hasDue ? 'maint-res-row--due' : 'maint-res-row--paid'}`}>
+      <div className="maint-res-row__header" onClick={() => setExpanded(e => !e)} style={{ cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="maint-res-avatar">
+            {(entry.resident?.name || 'U').slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ch-text-primary)' }}>
+              {entry.resident?.name || 'Unknown Resident'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ch-text-muted)' }}>
+              {entry.villa?.villaNumber || entry.resident?.villaNumber || '—'} · {entry.villa?.block || ''} · {entry.resident?.email || ''}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, color: 'var(--ch-text-muted)' }}>Balance Due</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: hasDue ? '#f87171' : '#34d399' }}>
+              {hasDue ? fmt(entry.totalDue) : '✓ Cleared'}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, color: 'var(--ch-text-muted)' }}>Total Paid</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#34d399' }}>{fmt(entry.totalPaid)}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className={`maint-status-badge`} style={hasDue
+              ? { background: '#ef444418', color: '#f87171', border: '1px solid #ef444433' }
+              : { background: '#10b98118', color: '#34d399', border: '1px solid #10b98133' }
+            }>
+              {hasDue ? 'Has Balance' : 'All Paid'}
+            </span>
+            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </div>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="maint-res-bills">
+          {entry.bills.map(bill => {
+            const st = STATUS_STYLE[bill.status] || STATUS_STYLE.PENDING;
+            const BillIcon = BILL_TYPE_ICON[bill.billType] || Receipt;
+            return (
+              <div key={bill._id} className="maint-bill-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: st.bg, border: `1px solid ${st.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <BillIcon size={14} color={st.text} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ch-text-primary)' }}>{bill.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ch-text-muted)' }}>
+                      {bill.month} · #{bill.receiptNumber} · Due {bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('en-IN') : '—'}
+                      {bill.status === 'PAID' && bill.paidDate && ` · Paid ${new Date(bill.paidDate).toLocaleDateString('en-IN')}`}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--ch-text-primary)' }}>{fmt(bill.totalAmount)}</span>
+                  <span className="maint-status-badge" style={{ background: st.bg, color: st.text, border: `1px solid ${st.border}` }}>{st.label}</span>
+                  {bill.razorpayPaymentId && (
+                    <span style={{ fontSize: 10, color: '#818cf8', background: '#6366f111', border: '1px solid #6366f133', padding: '2px 7px', borderRadius: 20, fontFamily: 'monospace' }}>
+                      {bill.razorpayPaymentId}
+                    </span>
+                  )}
+                  <button className="maint-icon-btn maint-icon-btn--edit" onClick={() => onEditBill(bill)} title="Edit">
+                    <Edit2 size={12} />
+                  </button>
+                  <button className="maint-icon-btn maint-icon-btn--del" onClick={() => onDeleteBill(bill._id, bill.title)} title="Delete">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export const MaintenancePage = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'COMMUNITY_ADMIN' || user?.role === 'SUPER_ADMIN';
 
-  const [payments, setPayments] = useState([]);
-  const [villas, setVillas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedBill, setSelectedBill] = useState(null);
+  // Shared state
+  const [payments, setPayments]           = useState([]);   // Resident: their own bills
+  const [summary, setSummary]             = useState([]);   // Admin: grouped by resident
+  const [allPayments, setAllPayments]     = useState([]);   // Admin: flat list
+  const [villas, setVillas]               = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [selectedBill, setSelectedBill]   = useState(null);
+  const [activeTab, setActiveTab]         = useState(isAdmin ? 'HISTORY' : 'BILLS');
+  const [search, setSearch]               = useState('');
+  const [filterStatus, setFilterStatus]   = useState('ALL');
 
-  // Default Maintenance Rate State
-  const [maintenanceRate, setMaintenanceRate] = useState(user?.community?.maintenanceMonthlyRate || 4500);
-  const [isEditingRate, setIsEditingRate] = useState(false);
+  // Admin-only UI state
+  const [maintenanceRate, setMaintenanceRate] = useState(4500);
+  const [isEditingRate, setIsEditingRate]     = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [editingBill, setEditingBill]         = useState(null);
 
-  // Custom Bill Modal State
-  const [showCustomBillModal, setShowCustomBillModal] = useState(false);
-  const [customBillForm, setCustomBillForm] = useState({
-    title: '',
-    billType: 'UTILITY',
-    month: 'August 2026',
-    amount: '',
-    dueDate: '',
-    villaId: '',
-    adminNotes: ''
+  // Custom bill form
+  const [customForm, setCustomForm] = useState({
+    title: '', billType: 'MAINTENANCE', month: `${new Date().toLocaleString('default',{month:'long'})} ${new Date().getFullYear()}`,
+    amount: '', dueDate: '', villaId: '', adminNotes: ''
   });
 
-  // Edit Bill Modal State
-  const [editingBill, setEditingBill] = useState(null);
-  const [editForm, setEditForm] = useState({
-    title: '',
-    billType: 'MAINTENANCE',
-    month: '',
-    amount: '',
-    dueDate: '',
-    status: 'PENDING',
-    adminNotes: ''
+  // Generate bills form
+  const [generateForm, setGenerateForm] = useState({
+    month: `${new Date().toLocaleString('default',{month:'long'})} ${new Date().getFullYear()}`,
+    amount: 4500,
+    dueDate: new Date(Date.now() + 15*86400000).toISOString().split('T')[0]
   });
 
-  const fetchPayments = async () => {
+  // Edit form
+  const [editForm, setEditForm] = useState({ title:'', billType:'MAINTENANCE', month:'', amount:'', dueDate:'', status:'PENDING', adminNotes:'' });
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await paymentService.getPayments();
-      setPayments(res.data.payments || []);
-    } catch (err) {
-      console.error(err);
+      if (isAdmin) {
+        // Admin: get full community payment summary
+        try {
+          const res = await paymentService.getSummary();
+          setSummary(res.data.summary || []);
+          setAllPayments(res.data.allPayments || []);
+        } catch {
+          setSummary(DEMO_SUMMARY);
+          setAllPayments(DEMO_SUMMARY.flatMap(e => e.bills));
+        }
+        try {
+          const vr = await villaService.getVillas();
+          setVillas(vr.data.villas || []);
+        } catch {}
+      } else {
+        // Resident: only their own issued bills
+        try {
+          const res = await paymentService.getPayments();
+          setPayments(res.data.payments || []);
+        } catch {
+          setPayments([]);
+        }
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchVillas = async () => {
-    try {
-      const res = await villaService.getVillas();
-      setVillas(res.data.villas || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  }, [isAdmin]);
 
   useEffect(() => {
-    fetchPayments();
-    if (isAdmin) fetchVillas();
-  }, []);
+    // When admin loads the page, silently purge any phantom auto-seeded bills from the DB
+    if (isAdmin) {
+      paymentService.purgePhantomBills().catch(() => {});
+    }
+    fetchData();
+  }, [fetchData]);
 
+  // ── Admin: manual purge phantom bills ──
+  const handlePurge = async () => {
+    if (!confirm('This will permanently delete all auto-seeded phantom bills (bills not issued by an admin). Continue?')) return;
+    try {
+      const res = await paymentService.purgePhantomBills();
+      alert(`✅ Removed ${res.data.deleted} phantom bills from the database.`);
+      fetchData();
+    } catch { alert('Purge failed.'); }
+  };
 
+  // ── Admin: generate bulk bills ──
+  const handleGenerateBills = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await paymentService.generateBills(generateForm);
+      alert(`✅ Generated ${res.data.count || 0} maintenance bills successfully!`);
+      setShowGenerateModal(false);
+      fetchData();
+    } catch { alert('Failed to generate bills. Try again.'); }
+  };
 
+  // ── Admin: custom bill ──
+  const handleCustomBill = async (e) => {
+    e.preventDefault();
+    try {
+      await paymentService.createCustomBill(customForm);
+      alert('✅ Custom bill issued!');
+      setShowCustomModal(false);
+      setCustomForm({ title:'', billType:'MAINTENANCE', month:generateForm.month, amount:'', dueDate:'', villaId:'', adminNotes:'' });
+      fetchData();
+    } catch { alert('Failed to issue custom bill.'); }
+  };
+
+  // ── Admin: edit bill ──
+  const handleOpenEdit = (bill) => {
+    setEditingBill(bill);
+    setEditForm({ title: bill.title, billType: bill.billType||'MAINTENANCE', month: bill.month, amount: bill.totalAmount, dueDate: bill.dueDate ? new Date(bill.dueDate).toISOString().split('T')[0]:'', status: bill.status, adminNotes: bill.adminNotes||'' });
+  };
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    try {
+      await paymentService.updateBill(editingBill._id, editForm);
+      setEditingBill(null);
+      fetchData();
+    } catch { alert('Failed to update bill.'); }
+  };
+
+  // ── Admin: delete ──
+  const handleDelete = async (id, title) => {
+    if (!confirm(`Delete bill "${title}"?`)) return;
+    try { await paymentService.deleteBill(id); fetchData(); } catch { alert('Failed to delete.'); }
+  };
+
+  // ── Admin: update rate ──
   const handleUpdateRate = async (e) => {
     e.preventDefault();
     try {
       const commId = user?.community?._id || user?.community || '65f1a2b3c4d5e6f7a8b9c0d1';
       await communityService.updateRate(commId, maintenanceRate);
-      alert(`Default monthly maintenance rate updated to ₹${maintenanceRate}!`);
       setIsEditingRate(false);
-    } catch (err) {
-      alert('Failed to update maintenance rate');
-    }
+      alert(`✅ Rate updated to ₹${maintenanceRate}/month`);
+    } catch { alert('Failed to update rate.'); }
   };
 
-  const handleCreateCustomBill = async (e) => {
-    e.preventDefault();
-    try {
-      await paymentService.createCustomBill(customBillForm);
-      alert('Custom bill issued successfully!');
-      setShowCustomBillModal(false);
-      setCustomBillForm({
-        title: '',
-        billType: 'UTILITY',
-        month: 'August 2026',
-        amount: '',
-        dueDate: '',
-        villaId: '',
-        adminNotes: ''
-      });
-      fetchPayments();
-    } catch (err) {
-      alert('Failed to create custom bill');
-    }
-  };
+  // ─── ADMIN STATS ──────────────────────────────────────────────────────────
+  const totalCollected    = allPayments.filter(p => p.status === 'PAID').reduce((s, p) => s + (p.totalAmount||0), 0);
+  const totalPending      = allPayments.filter(p => p.status === 'PENDING' || p.status === 'OVERDUE').reduce((s, p) => s + (p.totalAmount||0), 0);
+  const residentsCleared  = summary.filter(e => e.totalDue === 0).length;
+  const residentsDue      = summary.filter(e => e.totalDue > 0).length;
 
-  const handleOpenEditBill = (p) => {
-    setEditingBill(p);
-    setEditForm({
-      title: p.title,
-      billType: p.billType || 'MAINTENANCE',
-      month: p.month,
-      amount: p.totalAmount,
-      dueDate: p.dueDate ? new Date(p.dueDate).toISOString().split('T')[0] : '',
-      status: p.status,
-      adminNotes: p.adminNotes || ''
-    });
-  };
+  // ─── ADMIN HISTORY FILTER ────────────────────────────────────────────────
+  const filteredSummary = summary.filter(e => {
+    const matchSearch = !search ||
+      e.resident?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      e.villa?.villaNumber?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = filterStatus === 'ALL' ||
+      (filterStatus === 'DUE' && e.totalDue > 0) ||
+      (filterStatus === 'CLEARED' && e.totalDue === 0);
+    return matchSearch && matchStatus;
+  });
 
-  const handleSaveEditBill = async (e) => {
-    e.preventDefault();
-    try {
-      await paymentService.updateBill(editingBill._id, editForm);
-      alert('Bill updated successfully!');
-      setEditingBill(null);
-      fetchPayments();
-    } catch (err) {
-      alert('Failed to update bill');
-    }
-  };
+  // ─── RESIDENT BILLS FILTER ────────────────────────────────────────────────
+  const filteredBills = payments.filter(p => {
+    if (activeTab === 'PENDING') return p.status === 'PENDING' || p.status === 'OVERDUE';
+    if (activeTab === 'PAID')    return p.status === 'PAID';
+    return true;
+  });
 
-  const handleDeleteBill = async (id, title) => {
-    if (confirm(`Delete bill "${title}"?`)) {
-      try {
-        await paymentService.deleteBill(id);
-        fetchPayments();
-      } catch (err) {
-        alert('Failed to delete bill');
-      }
-    }
-  };
+  // ─── RESIDENT STATS ──────────────────────────────────────────────────────
+  const myPending = payments.filter(p => p.status === 'PENDING' || p.status === 'OVERDUE').reduce((s,p)=>s+(p.totalAmount||0),0);
+  const myPaid    = payments.filter(p => p.status === 'PAID').reduce((s,p)=>s+(p.totalAmount||0),0);
 
   return (
-    <div className="space-y-6">
-      
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="maint-page">
+
+      {/* ── PAGE HEADER ── */}
+      <div className="maint-header">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <span>Maintenance Bills & Custom Charges</span>
-            {isAdmin && (
-              <span className="text-xs bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-full font-bold">
-                Admin Financial Control
-              </span>
-            )}
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {isAdmin
-              ? 'Set default society maintenance rates, issue custom utility/event bills, edit existing invoices, and track Razorpay payments.'
-              : 'View monthly society invoices, custom charges, pay online via Razorpay, and view payment receipts.'}
-          </p>
+          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:4 }}>
+            <div className="maint-header-icon">
+              <CreditCard size={22} color="#818cf8" />
+            </div>
+            <div>
+              <h1 className="maint-title">
+                {isAdmin ? 'Maintenance & Billing Control' : 'My Maintenance Bills'}
+              </h1>
+              <p className="maint-subtitle">
+                {isAdmin
+                  ? 'Issue bills, track payments per resident, and manage the community\'s billing.'
+                  : 'View bills issued by your community admin and pay online via Razorpay.'}
+              </p>
+            </div>
+          </div>
         </div>
 
+        {/* Admin actions */}
         {isAdmin && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setIsEditingRate(!isEditingRate)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 transition-all"
-            >
-              <Settings className="w-4 h-4 text-amber-400" />
-              <span>Set Default Rate</span>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <button className="proposals-icon-btn" onClick={fetchData} title="Refresh">
+              <RefreshCw size={15} />
             </button>
-
             <button
-              onClick={() => setShowCustomBillModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/25 transition-all"
+              className="ch-btn-secondary"
+              onClick={() => setIsEditingRate(r => !r)}
+              style={{ display:'flex', alignItems:'center', gap:6 }}
             >
-              <Plus className="w-4 h-4" />
-              <span>+ Add Custom Bill</span>
+              <Settings size={14} /> Set Rate
+            </button>
+            <button
+              id="generate-bills-btn"
+              className="ch-btn-secondary"
+              onClick={() => setShowGenerateModal(true)}
+              style={{ display:'flex', alignItems:'center', gap:6 }}
+            >
+              <TrendingUp size={14} /> Generate Bulk Bills
+            </button>
+            <button
+              id="custom-bill-btn"
+              className="ch-btn-primary"
+              onClick={() => setShowCustomModal(true)}
+              style={{ display:'flex', alignItems:'center', gap:6 }}
+            >
+              <Plus size={14} /> Issue Custom Bill
             </button>
           </div>
         )}
       </div>
 
-      {/* Admin Maintenance Rate Config Box */}
+      {/* ── ADMIN: Rate editor ── */}
       {isAdmin && isEditingRate && (
-        <div className="bg-slate-900 text-white p-5 rounded-3xl border border-slate-800 shadow-xl animate-in fade-in slide-in-from-top-2">
-          <h3 className="font-bold text-sm text-slate-200 mb-2 flex items-center gap-2">
-            <Settings className="w-4 h-4 text-amber-400" />
-            Set Default Monthly Maintenance Tariff Rate
-          </h3>
-          <form onSubmit={handleUpdateRate} className="flex items-center gap-3 max-w-md">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">₹</span>
+        <div className="maint-rate-box">
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+            <Settings size={16} color="#fbbf24" />
+            <span style={{ fontWeight:700, fontSize:14 }}>Default Monthly Maintenance Rate</span>
+          </div>
+          <form onSubmit={handleUpdateRate} style={{ display:'flex', gap:10, alignItems:'center' }}>
+            <div style={{ position:'relative' }}>
+              <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--ch-text-muted)', fontWeight:700 }}>₹</span>
               <input
-                type="number"
-                required
-                min="500"
-                step="100"
+                type="number" min={100} step={100}
+                className="ch-form-input"
+                style={{ paddingLeft:28, width:140 }}
                 value={maintenanceRate}
-                onChange={(e) => setMaintenanceRate(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                onChange={e => setMaintenanceRate(e.target.value)}
               />
             </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-colors"
-            >
-              Update Rate
-            </button>
+            <button type="submit" className="ch-btn-primary" style={{ padding:'8px 18px', fontSize:12 }}>Update Rate</button>
+            <button type="button" className="ch-btn-secondary" style={{ padding:'8px 14px', fontSize:12 }} onClick={() => setIsEditingRate(false)}>Cancel</button>
           </form>
         </div>
       )}
 
-      {/* Payment Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {payments.map(p => (
-          <div key={p._id} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider">
-                    Invoice #{p.receiptNumber} • {p.billType || 'MAINTENANCE'}
-                  </span>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mt-0.5">{p.title}</h3>
-                </div>
+      {/* ── ADMIN: Stats ── */}
+      {isAdmin && (
+        <div className="maint-stats-grid">
+          <StatCard icon={IndianRupee}   label="Total Collected"   value={fmt(totalCollected)}  color="#10b981" sub={`${allPayments.filter(p=>p.status==='PAID').length} payments`} />
+          <StatCard icon={AlertCircle}   label="Outstanding"       value={fmt(totalPending)}    color="#f59e0b" sub={`${allPayments.filter(p=>p.status==='PENDING'||p.status==='OVERDUE').length} pending`} />
+          <StatCard icon={CheckCircle2}  label="Fully Cleared"     value={residentsCleared}     color="#34d399" sub="residents" />
+          <StatCard icon={TrendingDown}  label="Have Balance Due"  value={residentsDue}         color="#f87171" sub="residents" />
+        </div>
+      )}
 
-                <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    p.status === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300'
-                  }`}>
-                    {p.status}
-                  </span>
+      {/* ── RESIDENT: Stats ── */}
+      {!isAdmin && payments.length > 0 && (
+        <div className="maint-stats-grid" style={{ gridTemplateColumns:'1fr 1fr' }}>
+          <StatCard icon={AlertCircle}  label="Amount Due"  value={fmt(myPending)} color="#f59e0b" />
+          <StatCard icon={CheckCircle2} label="Total Paid"  value={fmt(myPaid)}    color="#10b981" />
+        </div>
+      )}
 
-                  {isAdmin && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEditBill(p)}
-                        className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
-                        title="Edit Bill Details"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBill(p._id, p.title)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
-                        title="Delete Bill"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+      {/* ── TABS (Admin only) ── */}
+      {isAdmin && (
+        <div className="proposals-tabs" style={{ gap:6 }}>
+          {[
+            { key:'HISTORY', label:'Payment History', icon:Users },
+            { key:'ALL',     label:'All Bills',       icon:Receipt },
+          ].map(t => {
+            const Icon = t.icon;
+            return (
+              <button key={t.key}
+                className={`proposals-tab ${activeTab === t.key ? 'proposals-tab--active' : ''}`}
+                onClick={() => setActiveTab(t.key)}
+              >
+                <Icon size={13} /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── RESIDENT BILL TABS ── */}
+      {!isAdmin && (
+        <div className="proposals-tabs" style={{ gap:6 }}>
+          {[
+            { key:'BILLS',   label:`All Bills (${payments.length})` },
+            { key:'PENDING', label:`Pending (${payments.filter(p=>p.status==='PENDING'||p.status==='OVERDUE').length})` },
+            { key:'PAID',    label:`Paid (${payments.filter(p=>p.status==='PAID').length})` },
+          ].map(t => (
+            <button key={t.key}
+              className={`proposals-tab ${activeTab === t.key ? 'proposals-tab--active' : ''}`}
+              onClick={() => setActiveTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ════ ADMIN: PAYMENT HISTORY TAB ════ */}
+      {isAdmin && activeTab === 'HISTORY' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {/* Search + filter bar */}
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+            <div className="proposals-search" style={{ flex:1, minWidth:180 }}>
+              <Search size={14} />
+              <input
+                id="history-search"
+                placeholder="Search by resident name or villa…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            {[
+              { key:'ALL',     label:'All Residents' },
+              { key:'DUE',     label:'Has Balance'   },
+              { key:'CLEARED', label:'Fully Paid'    },
+            ].map(f => (
+              <button key={f.key}
+                className={`proposals-tab ${filterStatus === f.key ? 'proposals-tab--active' : ''}`}
+                style={{ padding:'8px 14px' }}
+                onClick={() => setFilterStatus(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="proposals-empty"><div className="proposals-spinner" /><p>Loading payment history…</p></div>
+          ) : filteredSummary.length === 0 ? (
+            <div className="proposals-empty">
+              <Users size={44} style={{ opacity:0.15, marginBottom:10 }} />
+              <p style={{ fontWeight:600 }}>No billing records found</p>
+              <p style={{ fontSize:12 }}>Generate bulk bills or issue a custom bill to get started.</p>
+              <button className="ch-btn-primary" style={{ marginTop:14 }} onClick={() => setShowGenerateModal(true)}>
+                <TrendingUp size={13} /> Generate Maintenance Bills
+              </button>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {filteredSummary.map((entry, i) => (
+                <ResidentRow
+                  key={entry.resident?._id || i}
+                  entry={entry}
+                  onEditBill={handleOpenEdit}
+                  onDeleteBill={handleDelete}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ════ ADMIN: ALL BILLS FLAT LIST TAB ════ */}
+      {isAdmin && activeTab === 'ALL' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {loading ? (
+            <div className="proposals-empty"><div className="proposals-spinner" /></div>
+          ) : allPayments.length === 0 ? (
+            <div className="proposals-empty">
+              <Receipt size={44} style={{ opacity:0.15, marginBottom:10 }} />
+              <p style={{ fontWeight:600 }}>No bills issued yet</p>
+              <p style={{ fontSize:12 }}>Use "Generate Bulk Bills" or "Issue Custom Bill" to create the first invoice.</p>
+            </div>
+          ) : (
+            <div className="maint-bills-table">
+              <div className="maint-bills-table__head">
+                <span>Invoice / Title</span>
+                <span>Resident / Villa</span>
+                <span>Month</span>
+                <span>Due Date</span>
+                <span>Amount</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              {allPayments.map(p => {
+                const st = STATUS_STYLE[p.status] || STATUS_STYLE.PENDING;
+                return (
+                  <div key={p._id} className="maint-bills-table__row">
+                    <div>
+                      <div style={{ fontWeight:600, fontSize:12, color:'var(--ch-text-primary)' }}>{p.title}</div>
+                      <div style={{ fontSize:10, color:'var(--ch-text-muted)' }}>#{p.receiptNumber}</div>
                     </div>
+                    <div style={{ fontSize:12, color:'var(--ch-text-muted)' }}>
+                      {p.resident?.name || '—'} · {p.villa?.villaNumber || '—'}
+                    </div>
+                    <div style={{ fontSize:12, color:'var(--ch-text-muted)' }}>{p.month}</div>
+                    <div style={{ fontSize:12, color:'var(--ch-text-muted)' }}>
+                      {p.dueDate ? new Date(p.dueDate).toLocaleDateString('en-IN') : '—'}
+                    </div>
+                    <div style={{ fontWeight:700, fontSize:14, color:'var(--ch-text-primary)' }}>{fmt(p.totalAmount)}</div>
+                    <div>
+                      <span className="maint-status-badge" style={{ background:st.bg, color:st.text, border:`1px solid ${st.border}` }}>
+                        {st.label}
+                      </span>
+                    </div>
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button className="maint-icon-btn maint-icon-btn--edit" onClick={() => handleOpenEdit(p)}><Edit2 size={12}/></button>
+                      <button className="maint-icon-btn maint-icon-btn--del"  onClick={() => handleDelete(p._id, p.title)}><Trash2 size={12}/></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ════ RESIDENT: BILLS ════ */}
+      {!isAdmin && (
+        loading ? (
+          <div className="proposals-empty"><div className="proposals-spinner" /><p>Loading your bills…</p></div>
+        ) : filteredBills.length === 0 ? (
+          <div className="proposals-empty">
+            <Receipt size={48} style={{ opacity:0.15, marginBottom:12 }} />
+            <p style={{ fontWeight:600, color:'var(--ch-text-primary)' }}>
+              {activeTab === 'PAID' ? 'No paid bills yet' : activeTab === 'PENDING' ? 'No pending bills' : 'No bills issued to you yet'}
+            </p>
+            <p style={{ fontSize:13, color:'var(--ch-text-muted)', maxWidth:340, textAlign:'center' }}>
+              {activeTab === 'BILLS'
+                ? 'Your community admin has not issued any maintenance or custom bills to your account yet. Bills will appear here once issued.'
+                : 'Nothing to show for this filter.'}
+            </p>
+          </div>
+        ) : (
+          <div className="maint-res-bills-grid">
+            {filteredBills.map(p => {
+              const st = STATUS_STYLE[p.status] || STATUS_STYLE.PENDING;
+              const BillIcon = BILL_TYPE_ICON[p.billType] || Receipt;
+              return (
+                <div key={p._id} className="maint-bill-card">
+                  {/* Top stripe */}
+                  <div className="maint-bill-card__stripe" style={{ background: st.text }} />
+
+                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12 }}>
+                    <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                      <div style={{ width:40, height:40, borderRadius:10, background:st.bg, border:`1px solid ${st.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <BillIcon size={18} color={st.text} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize:10, fontWeight:700, color:'var(--ch-text-muted)', textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                          {p.billType?.replace(/_/g,' ')} · #{p.receiptNumber}
+                        </div>
+                        <div style={{ fontWeight:700, fontSize:14, color:'var(--ch-text-primary)', marginTop:2 }}>{p.title}</div>
+                      </div>
+                    </div>
+                    <span className="maint-status-badge" style={{ background:st.bg, color:st.text, border:`1px solid ${st.border}`, flexShrink:0 }}>
+                      {st.label}
+                    </span>
+                  </div>
+
+                  <div className="maint-bill-card__details">
+                    <div><span>Period</span><span>{p.month}</span></div>
+                    <div><span>Due Date</span><span style={{ color: p.status==='OVERDUE' ? '#f87171' : 'inherit' }}>
+                      {p.dueDate ? new Date(p.dueDate).toLocaleDateString('en-IN') : '—'}
+                    </span></div>
+                    {p.villa?.villaNumber && <div><span>Villa</span><span>{p.villa.villaNumber}</span></div>}
+                    <div className="maint-bill-card__total">
+                      <span>Total Amount</span>
+                      <span style={{ fontSize:22, fontWeight:900, color:'var(--ch-text-primary)' }}>{fmt(p.totalAmount)}</span>
+                    </div>
+                    {p.adminNotes && (
+                      <div style={{ padding:'8px 10px', background:'#f59e0b11', border:'1px solid #f59e0b33', borderRadius:8, fontSize:11, color:'#fbbf24' }}>
+                        📝 {p.adminNotes}
+                      </div>
+                    )}
+                  </div>
+
+                  {p.status === 'PAID' ? (
+                    <div className="maint-bill-card__paid">
+                      <CheckCircle2 size={14} />
+                      <span>Paid on {p.paidDate ? new Date(p.paidDate).toLocaleDateString('en-IN') : 'verified'}</span>
+                      {p.razorpayPaymentId && <span style={{ fontFamily:'monospace', fontSize:10, marginLeft:'auto' }}>{p.razorpayPaymentId}</span>}
+                    </div>
+                  ) : (
+                    <button
+                      className="maint-bill-card__paybtn"
+                      onClick={() => setSelectedBill(p)}
+                    >
+                      <CreditCard size={15} /> Pay {fmt(p.totalAmount)} via Razorpay
+                    </button>
                   )}
                 </div>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 text-xs space-y-2 mt-3">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Target Villa:</span>
-                  <span className="font-bold text-blue-600 dark:text-blue-400">{p.villa?.villaNumber || 'V-101'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Billing Period:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{p.month}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Due Date:</span>
-                  <span className="text-slate-800 dark:text-slate-200">{p.dueDate ? new Date(p.dueDate).toLocaleDateString() : 'N/A'}</span>
-                </div>
-                <div className="border-t border-slate-200 dark:border-slate-800 pt-2 flex justify-between items-center">
-                  <span className="font-bold text-slate-900 dark:text-white">Total Amount:</span>
-                  <span className="text-xl font-black text-blue-600 dark:text-blue-400">₹{p.totalAmount}</span>
-                </div>
-
-                {p.adminNotes && (
-                  <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-800 dark:text-amber-300">
-                    <span className="font-bold flex items-center gap-1 mb-0.5">
-                      📝 Admin Note / Remark:
-                    </span>
-                    <span>{p.adminNotes}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {p.status === 'PENDING' || p.status === 'OVERDUE' ? (
-              <button
-                onClick={() => setSelectedBill(p)}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>Pay ₹{p.totalAmount} via Razorpay</span>
-              </button>
-            ) : (
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs rounded-xl flex items-center justify-between border border-emerald-200 dark:border-emerald-800">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Paid on {p.paidDate ? new Date(p.paidDate).toLocaleDateString() : 'Today'}</span>
-                </div>
-                <span className="font-mono text-[10px] bg-emerald-100 dark:bg-emerald-900 px-2 py-0.5 rounded font-bold">
-                  {p.razorpayPaymentId || 'VERIFIED'}
-                </span>
-              </div>
-            )}
+              );
+            })}
           </div>
-        ))}
-      </div>
+        )
+      )}
 
-      {/* Inline Section: Add Custom Bill (Admin) */}
-      {showCustomBillModal && (
-        <div className="bg-slate-900 text-white rounded-3xl p-6 border border-blue-500/50 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="font-extrabold text-white text-base flex items-center gap-2">
-              <Plus className="w-5 h-5 text-blue-400" />
-              <span>Issue Custom / Utility / Fine Invoice</span>
-            </h3>
-            <button onClick={() => setShowCustomBillModal(false)} className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg">
-              Close Form
-            </button>
+      {/* ════ MODALS ════ */}
+
+      {/* Generate Bulk Bills Modal */}
+      {showGenerateModal && (
+        <div className="ch-modal-overlay" onClick={e => e.target===e.currentTarget && setShowGenerateModal(false)}>
+          <div className="ch-modal" style={{ maxWidth:440 }}>
+            <div className="ch-modal-header">
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ background:'#10b98122', padding:'6px 8px', borderRadius:8, display:'flex' }}><TrendingUp size={18} color="#34d399" /></span>
+                <div>
+                  <h2 className="ch-modal-title">Generate Bulk Maintenance Bills</h2>
+                  <p style={{ fontSize:12, color:'var(--ch-text-muted)', marginTop:2 }}>Issues bills to all occupied villas in your community</p>
+                </div>
+              </div>
+              <button className="ch-modal-close" onClick={() => setShowGenerateModal(false)}><X size={18}/></button>
+            </div>
+            <form onSubmit={handleGenerateBills} className="ch-modal-body" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <div className="ch-form-group">
+                <label className="ch-form-label">Billing Month</label>
+                <input id="gen-month" className="ch-form-input" placeholder="e.g. September 2026" value={generateForm.month} onChange={e => setGenerateForm(f=>({...f, month:e.target.value}))} required />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Amount (₹) per Villa</label>
+                  <input id="gen-amount" type="number" min={1} className="ch-form-input" value={generateForm.amount} onChange={e => setGenerateForm(f=>({...f, amount:e.target.value}))} required />
+                </div>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Due Date</label>
+                  <input id="gen-due" type="date" className="ch-form-input" value={generateForm.dueDate} onChange={e => setGenerateForm(f=>({...f, dueDate:e.target.value}))} required />
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button type="button" className="ch-btn-secondary" onClick={() => setShowGenerateModal(false)}>Cancel</button>
+                <button type="submit" id="gen-submit" className="ch-btn-primary">Generate Bills</button>
+              </div>
+            </form>
           </div>
-
-          <form onSubmit={handleCreateCustomBill} className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            <div className="md:col-span-6 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Bill Title</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. EV Charging Fee / Clubhouse Event"
-                value={customBillForm.title}
-                onChange={(e) => setCustomBillForm({ ...customBillForm, title: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="md:col-span-3 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Bill Category</label>
-              <select
-                value={customBillForm.billType}
-                onChange={(e) => setCustomBillForm({ ...customBillForm, billType: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
-              >
-                <option value="UTILITY">Utility Water/Power</option>
-                <option value="EV_CHARGING">EV Charging Station</option>
-                <option value="EVENT_FEE">Clubhouse Event Fee</option>
-                <option value="REPAIR_FINE">Property Repair Fine</option>
-                <option value="OTHER">Other Custom Charge</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-3 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Target Villa</label>
-              <select
-                required
-                value={customBillForm.villaId}
-                onChange={(e) => setCustomBillForm({ ...customBillForm, villaId: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
-              >
-                <option value="">Select Villa</option>
-                {villas.map(v => (
-                  <option key={v._id} value={v._id}>{v.villaNumber} ({v.block})</option>
-                ))}
-                {!villas.length && <option value="villa_101">V-101 (Phase 1)</option>}
-              </select>
-            </div>
-
-            <div className="md:col-span-4 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Amount (₹)</label>
-              <input
-                type="number"
-                required
-                min="1"
-                placeholder="1200"
-                value={customBillForm.amount}
-                onChange={(e) => setCustomBillForm({ ...customBillForm, amount: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
-              />
-            </div>
-
-            <div className="md:col-span-4 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Due Date</label>
-              <input
-                type="date"
-                required
-                value={customBillForm.dueDate}
-                onChange={(e) => setCustomBillForm({ ...customBillForm, dueDate: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
-              />
-            </div>
-
-            <div className="md:col-span-4 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Admin Note / Remark (Optional)</label>
-              <input
-                type="text"
-                placeholder="e.g. Calculated based on 150 kWh charging"
-                value={customBillForm.adminNotes}
-                onChange={(e) => setCustomBillForm({ ...customBillForm, adminNotes: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
-              />
-            </div>
-
-            <div className="md:col-span-12 flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowCustomBillModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/25"
-              >
-                Issue Invoice
-              </button>
-            </div>
-          </form>
         </div>
       )}
 
-      {/* Inline Section: Edit Existing Bill (Admin Increase/Decrease Amount & Notes) */}
+      {/* Issue Custom Bill Modal */}
+      {showCustomModal && (
+        <div className="ch-modal-overlay" onClick={e => e.target===e.currentTarget && setShowCustomModal(false)}>
+          <div className="ch-modal" style={{ maxWidth:520 }}>
+            <div className="ch-modal-header">
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ background:'#6366f122', padding:'6px 8px', borderRadius:8, display:'flex' }}><Plus size={18} color="#818cf8" /></span>
+                <div>
+                  <h2 className="ch-modal-title">Issue Custom Bill</h2>
+                  <p style={{ fontSize:12, color:'var(--ch-text-muted)', marginTop:2 }}>Issue a bill to a specific villa for any charge</p>
+                </div>
+              </div>
+              <button className="ch-modal-close" onClick={() => setShowCustomModal(false)}><X size={18}/></button>
+            </div>
+            <form onSubmit={handleCustomBill} className="ch-modal-body" style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              <div className="ch-form-group">
+                <label className="ch-form-label">Bill Title *</label>
+                <input id="custom-title" className="ch-form-input" placeholder="e.g. EV Charging Fee – August 2026" value={customForm.title} onChange={e=>setCustomForm(f=>({...f,title:e.target.value}))} required />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Bill Type</label>
+                  <select id="custom-type" className="ch-form-input ch-form-select" value={customForm.billType} onChange={e=>setCustomForm(f=>({...f,billType:e.target.value}))}>
+                    <option value="MAINTENANCE">Maintenance</option>
+                    <option value="UTILITY">Utility (Water/Power)</option>
+                    <option value="EV_CHARGING">EV Charging</option>
+                    <option value="EVENT_FEE">Clubhouse / Event Fee</option>
+                    <option value="REPAIR_FINE">Repair Fine</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Target Villa *</label>
+                  <select id="custom-villa" className="ch-form-input ch-form-select" value={customForm.villaId} onChange={e=>setCustomForm(f=>({...f,villaId:e.target.value}))} required>
+                    <option value="">Select Villa</option>
+                    {villas.map(v => <option key={v._id} value={v._id}>{v.villaNumber}{v.owner?.name ? ` (${v.owner.name})` : ''}</option>)}
+                    {!villas.length && <option value="villa_101">V-101 (Demo)</option>}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Amount (₹) *</label>
+                  <input id="custom-amount" type="number" min={1} className="ch-form-input" placeholder="2000" value={customForm.amount} onChange={e=>setCustomForm(f=>({...f,amount:e.target.value}))} required />
+                </div>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Billing Month</label>
+                  <input id="custom-month" className="ch-form-input" value={customForm.month} onChange={e=>setCustomForm(f=>({...f,month:e.target.value}))} />
+                </div>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Due Date *</label>
+                  <input id="custom-due" type="date" className="ch-form-input" value={customForm.dueDate} onChange={e=>setCustomForm(f=>({...f,dueDate:e.target.value}))} required />
+                </div>
+              </div>
+              <div className="ch-form-group">
+                <label className="ch-form-label">Admin Note (optional)</label>
+                <input id="custom-note" className="ch-form-input" placeholder="e.g. Calculated based on 150 kWh usage" value={customForm.adminNotes} onChange={e=>setCustomForm(f=>({...f,adminNotes:e.target.value}))} />
+              </div>
+              <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button type="button" className="ch-btn-secondary" onClick={() => setShowCustomModal(false)}>Cancel</button>
+                <button type="submit" id="custom-submit" className="ch-btn-primary">Issue Bill</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Bill Modal */}
       {editingBill && (
-        <div className="bg-slate-900 text-white rounded-3xl p-6 border border-amber-500/50 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="font-extrabold text-white text-base flex items-center gap-2">
-              <Edit2 className="w-5 h-5 text-amber-400" />
-              <span>Modify Maintenance Invoice: {editingBill.title}</span>
-            </h3>
-            <button onClick={() => setEditingBill(null)} className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg">
-              Close Editor
-            </button>
+        <div className="ch-modal-overlay" onClick={e => e.target===e.currentTarget && setEditingBill(null)}>
+          <div className="ch-modal" style={{ maxWidth:480 }}>
+            <div className="ch-modal-header">
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ background:'#f59e0b22', padding:'6px 8px', borderRadius:8, display:'flex' }}><Edit2 size={18} color="#fbbf24" /></span>
+                <h2 className="ch-modal-title">Edit Bill</h2>
+              </div>
+              <button className="ch-modal-close" onClick={() => setEditingBill(null)}><X size={18}/></button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="ch-modal-body" style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              <div className="ch-form-group">
+                <label className="ch-form-label">Bill Title</label>
+                <input className="ch-form-input" value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))} required />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Amount (₹)</label>
+                  <input type="number" min={0} className="ch-form-input" value={editForm.amount} onChange={e=>setEditForm(f=>({...f,amount:e.target.value}))} />
+                </div>
+                <div className="ch-form-group">
+                  <label className="ch-form-label">Status</label>
+                  <select className="ch-form-input ch-form-select" value={editForm.status} onChange={e=>setEditForm(f=>({...f,status:e.target.value}))}>
+                    <option value="PENDING">Pending</option>
+                    <option value="PAID">Paid</option>
+                    <option value="OVERDUE">Overdue</option>
+                  </select>
+                </div>
+              </div>
+              {/* Quick adjust buttons */}
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:11, color:'var(--ch-text-muted)' }}>Quick adjust:</span>
+                {[+500,+100,-100,-500].map(d => (
+                  <button type="button" key={d}
+                    onClick={() => setEditForm(f=>({...f, amount: Math.max(0, Number(f.amount)+d)}))}
+                    style={{ padding:'3px 10px', borderRadius:6, fontSize:11, fontWeight:700, border:'1px solid', cursor:'pointer',
+                      background: d>0 ? '#10b98111' : '#ef444411',
+                      color: d>0 ? '#34d399' : '#f87171',
+                      borderColor: d>0 ? '#10b98133' : '#ef444433'
+                    }}
+                  >{d>0?'+':''}{d>0?'₹':'₹'}{Math.abs(d)}</button>
+                ))}
+              </div>
+              <div className="ch-form-group">
+                <label className="ch-form-label">Admin Note</label>
+                <input className="ch-form-input" placeholder="Reason for change…" value={editForm.adminNotes} onChange={e=>setEditForm(f=>({...f,adminNotes:e.target.value}))} />
+              </div>
+              <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button type="button" className="ch-btn-secondary" onClick={() => setEditingBill(null)}>Cancel</button>
+                <button type="submit" className="ch-btn-primary">Save Changes</button>
+              </div>
+            </form>
           </div>
-
-          <form onSubmit={handleSaveEditBill} className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            <div className="md:col-span-6 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Bill Title</label>
-              <input
-                type="text"
-                required
-                value={editForm.title}
-                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl"
-              />
-            </div>
-
-            {/* Increase / Decrease Amount Control Box */}
-            <div className="md:col-span-6 bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2">
-              <label className="block text-xs font-bold text-slate-200">
-                Bill Amount Adjuster (Increase / Decrease)
-              </label>
-              
-              <div className="flex items-center gap-2">
-                <span className="font-black text-sm text-slate-400">₹</span>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={editForm.amount}
-                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                  className="flex-1 px-3 py-1.5 text-base font-bold bg-slate-800 border border-slate-700 rounded-xl text-blue-400"
-                />
-              </div>
-
-              {/* Quick Adjustment Pills */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                <span className="text-[10px] text-slate-400 font-semibold self-center mr-1">Quick Adjust:</span>
-                <button
-                  type="button"
-                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) + 500) })}
-                  className="px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-md text-[11px] font-bold hover:bg-emerald-900"
-                >
-                  + ₹500
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) + 100) })}
-                  className="px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-md text-[11px] font-bold hover:bg-emerald-900"
-                >
-                  + ₹100
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) - 100) })}
-                  className="px-2 py-0.5 bg-rose-950 text-rose-300 border border-rose-800 rounded-md text-[11px] font-bold hover:bg-rose-900"
-                >
-                  - ₹100
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditForm({ ...editForm, amount: Math.max(0, Number(editForm.amount || 0) - 500) })}
-                  className="px-2 py-0.5 bg-rose-950 text-rose-300 border border-rose-800 rounded-md text-[11px] font-bold hover:bg-rose-900"
-                >
-                  - ₹500
-                </button>
-              </div>
-            </div>
-
-            <div className="md:col-span-3 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Billing Period</label>
-              <input
-                type="text"
-                value={editForm.month}
-                onChange={(e) => setEditForm({ ...editForm, month: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
-              />
-            </div>
-
-            <div className="md:col-span-3 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">Payment Status</label>
-              <select
-                value={editForm.status}
-                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl font-bold"
-              >
-                <option value="PENDING">PENDING</option>
-                <option value="PAID">PAID</option>
-                <option value="OVERDUE">OVERDUE</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-6 space-y-1">
-              <label className="block text-xs font-semibold text-slate-300">
-                Admin Note / Reason for Amount Modification
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Added ₹200 late fee surcharge / Discount applied for early payment"
-                value={editForm.adminNotes}
-                onChange={(e) => setEditForm({ ...editForm, adminNotes: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 rounded-xl"
-              />
-            </div>
-
-            <div className="md:col-span-12 flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setEditingBill(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-amber-500/25"
-              >
-                Save Modified Bill
-              </button>
-            </div>
-          </form>
         </div>
       )}
 
+      {/* Razorpay Payment Modal */}
       {selectedBill && (
         <RazorpayModal
           isOpen={!!selectedBill}
           onClose={() => setSelectedBill(null)}
           bill={selectedBill}
-          onPaymentSuccess={() => {
-            setSelectedBill(null);
-            fetchPayments();
-          }}
+          onPaymentSuccess={() => { setSelectedBill(null); fetchData(); }}
         />
       )}
     </div>

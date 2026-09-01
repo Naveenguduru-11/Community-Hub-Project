@@ -78,3 +78,33 @@ exports.deleteNotice = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.updateNotice = async (req, res, next) => {
+  try {
+    const { title, content, category, priority } = req.body;
+    const isConnected = mongoose.connection.readyState === 1;
+
+    if (isConnected && mongoose.Types.ObjectId.isValid(req.params.id)) {
+      const notice = await Notice.findByIdAndUpdate(
+        req.params.id,
+        { title, content, category, priority },
+        { new: true, runValidators: true }
+      ).populate('author', 'name role');
+
+      if (!notice) return res.status(404).json({ success: false, message: 'Notice not found' });
+      return res.status(200).json({ success: true, notice });
+    } else {
+      const notice = memoryNotices.find(n => n._id === req.params.id);
+      if (notice) {
+        if (title) notice.title = title;
+        if (content) notice.content = content;
+        if (category) notice.category = category;
+        if (priority) notice.priority = priority;
+        notice.updatedAt = new Date();
+      }
+      return res.status(200).json({ success: true, notice });
+    }
+  } catch (error) {
+    next(error);
+  }
+};

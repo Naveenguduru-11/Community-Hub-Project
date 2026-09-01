@@ -15,9 +15,9 @@ export const Register = () => {
     password: '',
     phone: '',
     role: initialRole,
-    buildingBlock: 'Building A',
-    floorNumber: 'Floor 1',
-    villaNumber: 'Flat 101'
+    buildingBlock: '',
+    floorNumber: '',
+    villaNumber: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -268,9 +268,12 @@ export const Register = () => {
 
                 {/* Residence Details */}
                 <div className="bg-blue-50/70 p-3 rounded-2xl border border-blue-100 space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-blue-900">
-                    <Home className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Residence Location (Building, Floor & Flat/Villa)</span>
+                  <div className="flex items-center justify-between text-xs font-extrabold text-blue-900">
+                    <div className="flex items-center gap-1.5">
+                      <Home className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Residence / Villa Location</span>
+                    </div>
+                    <span className="text-[10px] text-blue-600 font-semibold">(Your Actual Villa Info)</span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
@@ -278,11 +281,10 @@ export const Register = () => {
                       <label className="block text-[10px] font-bold text-slate-700 mb-1">Building / Block</label>
                       <input
                         type="text"
-                        required
-                        placeholder="Building A"
+                        placeholder="e.g. Phase 1"
                         value={formData.buildingBlock}
                         onChange={(e) => setFormData({ ...formData, buildingBlock: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900"
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
 
@@ -290,23 +292,21 @@ export const Register = () => {
                       <label className="block text-[10px] font-bold text-slate-700 mb-1">Floor No.</label>
                       <input
                         type="text"
-                        required
-                        placeholder="Floor 1"
+                        placeholder="e.g. 2nd Floor"
                         value={formData.floorNumber}
                         onChange={(e) => setFormData({ ...formData, floorNumber: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900"
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-700 mb-1">Flat / Villa No.</label>
+                      <label className="block text-[10px] font-bold text-slate-700 mb-1">Villa / Flat No.</label>
                       <input
                         type="text"
-                        required
-                        placeholder="Flat 101"
+                        placeholder="e.g. V-105"
                         value={formData.villaNumber}
                         onChange={(e) => setFormData({ ...formData, villaNumber: e.target.value })}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900"
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                   </div>

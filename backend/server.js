@@ -20,6 +20,9 @@ const noticeRoutes = require('./routes/noticeRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const proposalRoutes = require('./routes/proposalRoutes');
+const auditRoutes = require('./routes/auditRoutes');
+const listingRoutes = require('./routes/listingRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -58,6 +61,9 @@ app.use('/api/notices', noticeRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/proposals', proposalRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/listings', listingRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);

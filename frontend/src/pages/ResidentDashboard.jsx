@@ -4,11 +4,44 @@ import { visitorService, paymentService, complaintService, noticeService, eventS
 import { VisitorPassModal } from '../components/visitors/VisitorPassModal';
 import { RazorpayModal } from '../components/payments/RazorpayModal';
 import { ComplaintModal } from '../components/complaints/ComplaintModal';
-import { 
-  Home, QrCode, CreditCard, AlertCircle, Bell, Calendar, 
-  Trash2, Plus, Sparkles, ShieldCheck, CheckCircle2, ArrowRight, Activity, Gamepad2
+import {
+  QrCode, CreditCard, AlertCircle, Calendar,
+  Bell, Plus, Trash2, CheckCircle2, ArrowRight,
+  TrendingUp, TrendingDown, Home, Clock, ChevronRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+function QuickBtn({ icon: Icon, label, color, onClick, to }) {
+  const inner = (
+    <>
+      <span className="ch-quick-icon" style={{ background: color + '22' }}>
+        <Icon size={20} style={{ color }} />
+      </span>
+      <span className="ch-quick-label">{label}</span>
+    </>
+  );
+  if (to) return <Link to={to} className="ch-quick-btn">{inner}</Link>;
+  return <button className="ch-quick-btn" onClick={onClick}>{inner}</button>;
+}
+
+function StatCard({ icon: Icon, iconClass, label, value, sub, trendUp, trendLabel }) {
+  return (
+    <div className="ch-stat-card">
+      <span className={`ch-stat-icon ${iconClass}`}><Icon size={24} /></span>
+      <div className="ch-stat-body">
+        <div className="ch-stat-label">{label}</div>
+        <div className="ch-stat-value ch-stat-value--sm">{value}</div>
+        {sub && <div className="ch-stat-sub">{sub}</div>}
+        {trendLabel && (
+          <div className={`ch-stat-trend ${trendUp !== undefined ? (trendUp ? 'ch-stat-trend--up' : 'ch-stat-trend--down') : 'ch-stat-trend--warn'}`}>
+            {trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {trendLabel}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const ResidentDashboard = () => {
   const { user } = useAuth();
@@ -18,369 +51,243 @@ export const ResidentDashboard = () => {
   const [notices, setNotices] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Modals
   const [showVisitorModal, setShowVisitorModal] = useState(false);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [selectedBillForPayment, setSelectedBillForPayment] = useState(null);
 
-  const fetchResidentData = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
       const [vRes, pRes, cRes, nRes, eRes] = await Promise.all([
-        visitorService.getVisitors(),
-        paymentService.getPayments(),
-        complaintService.getComplaints(),
-        noticeService.getNotices(),
-        eventService.getEvents()
+        visitorService.getVisitors(), paymentService.getPayments(),
+        complaintService.getComplaints(), noticeService.getNotices(), eventService.getEvents()
       ]);
-      const rawVisitors = vRes.data.visitors || [];
-      const rawPayments = pRes.data.payments || [];
-      const rawComplaints = cRes.data.complaints || [];
-      const rawNotices = nRes.data.notices || [];
-      const rawEvents = eRes.data.events || [];
-
-      setVisitors(Array.from(new Map(rawVisitors.map(v => [v.passcode || v._id, v])).values()));
-      setPayments(Array.from(new Map(rawPayments.map(p => [p.receiptNumber || p._id, p])).values()));
-      setComplaints(Array.from(new Map(rawComplaints.map(c => [c._id || c.title, c])).values()));
-      setNotices(Array.from(new Map(rawNotices.map(n => [n._id || n.title, n])).values()));
-      setEvents(Array.from(new Map(rawEvents.map(e => [e._id || e.title, e])).values()));
-    } catch (err) {
-      console.error('Failed to load resident dashboard:', err);
-    } finally {
-      setLoading(false);
-    }
+      setVisitors(Array.from(new Map((vRes.data.visitors || []).map(v => [v._id, v])).values()));
+      setPayments(Array.from(new Map((pRes.data.payments || []).map(p => [p._id, p])).values()));
+      setComplaints(Array.from(new Map((cRes.data.complaints || []).map(c => [c._id, c])).values()));
+      setNotices(Array.from(new Map((nRes.data.notices || []).map(n => [n._id, n])).values()));
+      setEvents(Array.from(new Map((eRes.data.events || []).map(e => [e._id, e])).values()));
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    fetchResidentData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
+
+  const pendingBill = payments.find(p => p.status === 'PENDING' || p.status === 'OVERDUE');
+  const openCount = complaints.filter(c => c.status !== 'RESOLVED').length;
+
+  // Real API data only — no hardcoded fallbacks
+  const displayNotices  = notices.slice(0, 3);
+  const displayVisitors = visitors.slice(0, 3);
 
   const handleDeleteVisitor = async (id, name) => {
-    if (confirm(`Cancel and delete guest pass for ${name}?`)) {
-      try {
-        await visitorService.deletePass(id);
-        fetchResidentData();
-      } catch (err) {
-        alert('Failed to delete visitor pass');
-      }
+    if (confirm(`Cancel guest pass for ${name}?`)) {
+      try { await visitorService.deletePass(id); fetchData(); }
+      catch { alert('Failed to delete'); }
     }
   };
 
   const handleDeleteComplaint = async (id, title) => {
-    if (confirm(`Delete helpdesk ticket "${title}"?`)) {
-      try {
-        await complaintService.deleteComplaint(id);
-        fetchResidentData();
-      } catch (err) {
-        alert('Failed to delete complaint ticket');
-      }
+    if (confirm(`Delete ticket "${title}"?`)) {
+      try { await complaintService.deleteComplaint(id); fetchData(); }
+      catch { alert('Failed to delete'); }
     }
   };
 
-  const pendingBill = payments.find(p => p.status === 'PENDING' || p.status === 'OVERDUE');
-  const openComplaintsCount = complaints.filter(c => c.status !== 'RESOLVED').length;
+  const STATUS_COLORS = { INSIDE: '#10b981', PRE_APPROVED: '#6366f1', EXITED: '#9ca3af', PENDING: '#f59e0b' };
+  const COMPLAINT_STATUS_COLORS = { OPEN: '#ef4444', IN_PROGRESS: '#f59e0b', RESOLVED: '#10b981' };
+
 
   return (
-    <div className="space-y-6">
-      
-      {/* Executive Emerald Welcome Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-emerald-700/50 relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/30 px-3.5 py-1 rounded-full text-xs font-bold mb-3 text-emerald-200 backdrop-blur-md">
-              <Home className="w-3.5 h-3.5 text-amber-400" />
-              <span>Villa {user?.villa?.villaNumber || user?.villaNumber || 'Flat 101'} • {user?.buildingBlock || 'Building A'}</span>
-            </div>
-            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">Welcome, {user?.name}!</h1>
-            <p className="text-emerald-100 text-xs sm:text-sm mt-1.5 max-w-xl font-medium leading-relaxed">
-              Manage your QR visitor passes, pay maintenance fees, track helpdesk tickets, and host resident community games.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2.5">
-            <button
-              onClick={() => setShowVisitorModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-900/40 transition-all transform hover:-translate-y-0.5"
-            >
-              <QrCode className="w-4 h-4" />
-              <span>+ Create Guest Pass</span>
-            </button>
-            
-            <button
-              onClick={() => setShowComplaintModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs rounded-xl border border-white/20 transition-all backdrop-blur-md"
-            >
-              <AlertCircle className="w-4 h-4" />
-              <span>+ Raise Ticket</span>
-            </button>
-          </div>
-        </div>
+    <div>
+      {/* ── Stat Cards ── */}
+      <div className="ch-stat-grid">
+        <StatCard icon={QrCode} iconClass="ch-stat-icon--green" label="Active Guest Passes" value={visitors.length} sub="Gate Pass Ready" trendUp trendLabel="All active" />
+        <StatCard icon={AlertCircle} iconClass="ch-stat-icon--orange" label="Open Tickets" value={openCount} sub={openCount > 0 ? 'Awaiting resolution' : 'All clear ✓'} trendUp={openCount === 0} trendLabel={openCount > 0 ? 'In resolution' : 'No issues'} />
+        <StatCard icon={CreditCard} iconClass="ch-stat-icon--blue" label="Maintenance Due" value={pendingBill ? `₹ ${Number(pendingBill.totalAmount).toLocaleString('en-IN')}` : 'Paid ✓'} sub={pendingBill ? 'Payment pending' : 'Up to date'} trendUp={!pendingBill} trendLabel={pendingBill ? 'Due soon' : 'All paid'} />
+        <StatCard icon={Calendar} iconClass="ch-stat-icon--purple" label="Community Events" value={events.length} sub="Upcoming events" trendUp trendLabel="Games & Sports" />
       </div>
 
-      {/* KPI Stats Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group hover:border-emerald-500/40 transition-all">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Active Guest Passes</span>
-            <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">{visitors.length}</span>
-            <span className="text-[10px] text-emerald-600 font-bold inline-flex items-center gap-1 mt-1">
-              <CheckCircle2 className="w-3 h-3" /> Gate Pass Ready
-            </span>
-          </div>
-          <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 group-hover:scale-110 transition-transform">
-            <QrCode className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group hover:border-amber-500/40 transition-all">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Open Tickets</span>
-            <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400 mt-1 block">{openComplaintsCount}</span>
-            <span className="text-[10px] text-amber-600 font-bold inline-flex items-center gap-1 mt-1">
-              <Activity className="w-3 h-3" /> {openComplaintsCount > 0 ? 'In Resolution' : 'All Clear'}
-            </span>
-          </div>
-          <div className="p-3 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 group-hover:scale-110 transition-transform">
-            <AlertCircle className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group hover:border-blue-500/40 transition-all">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Bills & Utility</span>
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1 block">
-              {pendingBill ? `₹${pendingBill.totalAmount}` : 'Paid'}
-            </span>
-            <span className={`text-[10px] font-bold inline-flex items-center gap-1 mt-1 ${pendingBill ? 'text-amber-600' : 'text-emerald-600'}`}>
-              {pendingBill ? 'Payment Pending' : 'Up to date'}
-            </span>
-          </div>
-          <div className="p-3 rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 group-hover:scale-110 transition-transform">
-            <CreditCard className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group hover:border-purple-500/40 transition-all">
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Community Events</span>
-            <span className="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400 mt-1 block">{events.length}</span>
-            <span className="text-[10px] text-purple-600 font-bold inline-flex items-center gap-1 mt-1">
-              <Gamepad2 className="w-3 h-3" /> Games & Sports
-            </span>
-          </div>
-          <div className="p-3 rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400 group-hover:scale-110 transition-transform">
-            <Calendar className="w-6 h-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Pending Maintenance Bill Banner */}
+      {/* Pending Bill Banner */}
       {pendingBill && (
-        <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-amber-500 text-white rounded-xl shadow-md">
-              <CreditCard className="w-6 h-6" />
-            </div>
+        <div style={{
+          background: 'linear-gradient(135deg, #fffbeb, #fef3c7)', border: '2px solid #fcd34d',
+          borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 16, marginBottom: 20
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={{ width: 44, height: 44, background: '#f59e0b', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <CreditCard size={22} />
+            </span>
             <div>
-              <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-                Maintenance Payment Pending: {pendingBill.title}
-              </h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-                Amount Due: <strong className="text-amber-600 dark:text-amber-400 text-sm">₹{pendingBill.totalAmount}</strong> • Due Date: {new Date(pendingBill.dueDate).toLocaleDateString()}
-              </p>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#92400e' }}>Maintenance Payment Pending: {pendingBill.title}</div>
+              <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
+                Amount Due: <strong>₹ {Number(pendingBill.totalAmount).toLocaleString('en-IN')}</strong>
+                {pendingBill.dueDate && ` • Due: ${new Date(pendingBill.dueDate).toLocaleDateString('en-IN')}`}
+              </div>
             </div>
           </div>
-
-          <button
-            onClick={() => setSelectedBillForPayment(pendingBill)}
-            className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-amber-500/25 transition-all"
-          >
-            Pay Now with Razorpay
+          <button onClick={() => setSelectedBillForPayment(pendingBill)}
+            style={{ padding: '10px 20px', background: '#f59e0b', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Pay Now
           </button>
         </div>
       )}
 
-      {/* Main Feature Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Visitors Log Widget */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-emerald-600" />
-                Active Guest Passes
-              </h3>
-              <span className="text-[11px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full">
-                {visitors.length} total
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {visitors.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
-                  <QrCode className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs text-slate-400 font-medium">No active guest passes created.</p>
-                </div>
-              ) : (
-                visitors.slice(0, 3).map(v => (
-                  <div key={v._id} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="font-bold block text-slate-900 dark:text-white">{v.name}</span>
-                      <span className="text-[10px] text-slate-500 block font-medium mt-0.5">{v.visitorType} • Passcode: <strong className="font-mono text-emerald-700 font-bold">{v.passcode}</strong></span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                        v.status === 'INSIDE' ? 'bg-emerald-100 text-emerald-700' :
-                        v.status === 'PRE_APPROVED' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
-                      }`}>
-                        {v.status}
-                      </span>
-                      <button
-                        onClick={() => handleDeleteVisitor(v._id, v.name)}
-                        className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                        title="Cancel Guest Pass"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowVisitorModal(true)}
-            className="mt-5 w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-          >
-            <Plus className="w-4 h-4 text-emerald-600" />
-            <span>Create New Visitor Pass</span>
-          </button>
+      {/* ── Quick Actions ── */}
+      <div className="ch-section">
+        <div className="ch-section-header">
+          <span className="ch-section-title">Quick Actions</span>
         </div>
-
-        {/* Helpdesk Ticket Widget */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-500" />
-                My Helpdesk Tickets
-              </h3>
-              <span className="text-[11px] bg-amber-100 text-amber-800 font-extrabold px-2.5 py-0.5 rounded-full">
-                {openComplaintsCount} open
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {complaints.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
-                  <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs text-slate-400 font-medium">No helpdesk tickets raised.</p>
-                </div>
-              ) : (
-                complaints.slice(0, 3).map(c => (
-                  <div key={c._id} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs flex items-center justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
-                        <span className="truncate">{c.title}</span>
-                        <span className="text-[10px] text-amber-600 shrink-0 font-bold">{c.status}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5 font-medium">{c.description}</p>
-                    </div>
-
-                    <button
-                      onClick={() => handleDeleteComplaint(c._id, c.title)}
-                      className="p-1 text-slate-400 hover:text-red-500 transition-colors shrink-0"
-                      title="Delete Ticket"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowComplaintModal(true)}
-            className="mt-5 w-full py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-          >
-            <Plus className="w-4 h-4 text-amber-600" />
-            <span>Raise New Complaint Ticket</span>
-          </button>
+        <div className="ch-quick-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+          <QuickBtn icon={QrCode} label="Create Guest Pass" color="#10b981" onClick={() => setShowVisitorModal(true)} />
+          <QuickBtn icon={AlertCircle} label="Raise Ticket" color="#ef4444" onClick={() => setShowComplaintModal(true)} />
+          <QuickBtn icon={CreditCard} label="Pay Maintenance" color="#3b82f6" onClick={() => pendingBill && setSelectedBillForPayment(pendingBill)} />
+          <QuickBtn icon={Calendar} label="View Events" color="#8b5cf6" to="/events" />
+          <QuickBtn icon={Bell} label="View Notices" color="#f59e0b" to="/notices" />
         </div>
-
-        {/* Notices & Events Widget */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                <Bell className="w-4 h-4 text-purple-600" />
-                Community Announcements
-              </h3>
-              <Link to="/notices" className="text-[11px] text-emerald-700 font-extrabold hover:underline flex items-center gap-1">
-                View All <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-
-            <div className="space-y-3">
-              {notices.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
-                  <Bell className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs text-slate-400 font-medium">No community notices posted yet.</p>
-                </div>
-              ) : (
-                notices.slice(0, 3).map(n => (
-                  <div key={n._id} className="p-3 bg-purple-50/70 dark:bg-slate-800/60 rounded-2xl border border-purple-100 dark:border-slate-800 text-xs">
-                    <span className="font-bold block text-slate-900 dark:text-white mb-0.5">{n.title}</span>
-                    <p className="text-slate-600 dark:text-slate-300 text-[11px] line-clamp-2 font-medium">{n.content}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <Link
-            to="/events"
-            className="mt-5 w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-extrabold rounded-xl transition-colors flex items-center justify-center gap-2 border border-emerald-200"
-          >
-            <Gamepad2 className="w-4 h-4 text-emerald-700" />
-            <span>🎮 Host or Join Resident Games</span>
-          </Link>
-        </div>
-
       </div>
 
+      {/* ── Three-column cards ── */}
+      <div className="ch-row-3">
+        {/* My Guest Passes */}
+        <div className="ch-section" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="ch-section-header">
+            <span className="ch-section-title" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <QrCode size={15} color="#10b981" /> Active Guest Passes
+            </span>
+            <span style={{ fontSize: 11, background: '#d1fae5', color: '#065f46', fontWeight: 700, padding: '2px 8px', borderRadius: 99 }}>{visitors.length} total</span>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {visitors.length === 0 ? (
+              <div className="ch-empty">
+                <QrCode size={32} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
+                <p>No active guest passes</p>
+              </div>
+            ) : (
+              visitors.slice(0, 3).map(v => (
+                <div key={v._id} style={{ padding: '10px 12px', background: 'var(--ch-body-bg)', borderRadius: 12, border: '1px solid var(--ch-card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: 'var(--ch-text-primary)' }}>{v.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ch-text-muted)', marginTop: 2 }}>
+                      {v.visitorType} • Code: <strong style={{ fontFamily: 'monospace', color: '#10b981' }}>{v.passcode}</strong>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 700, background: (STATUS_COLORS[v.status] || '#9ca3af') + '22', color: STATUS_COLORS[v.status] || '#9ca3af' }}>{v.status}</span>
+                    <button onClick={() => handleDeleteVisitor(v._id, v.name)} style={{ color: 'var(--ch-text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <button onClick={() => setShowVisitorModal(true)} style={{ marginTop: 14, padding: '10px', background: 'var(--ch-body-bg)', border: '1px solid var(--ch-card-border)', borderRadius: 10, fontSize: 12, fontWeight: 700, color: 'var(--ch-text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Plus size={14} color="#10b981" /> Create New Visitor Pass
+          </button>
+        </div>
+
+        {/* My Helpdesk Tickets */}
+        <div className="ch-section" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="ch-section-header">
+            <span className="ch-section-title" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <AlertCircle size={15} color="#f59e0b" /> My Helpdesk Tickets
+            </span>
+            <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', fontWeight: 700, padding: '2px 8px', borderRadius: 99 }}>{openCount} open</span>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {complaints.length === 0 ? (
+              <div className="ch-empty">
+                <AlertCircle size={32} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
+                <p>No helpdesk tickets raised</p>
+              </div>
+            ) : (
+              complaints.slice(0, 3).map(c => (
+                <div key={c._id} style={{ padding: '10px 12px', background: 'var(--ch-body-bg)', borderRadius: 12, border: '1px solid var(--ch-card-border)', fontSize: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, color: 'var(--ch-text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+                    <button onClick={() => handleDeleteComplaint(c._id, c.title)} style={{ color: 'var(--ch-text-muted)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex' }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 10, background: '#e0e7ff', color: '#3730a3', padding: '2px 7px', borderRadius: 6, fontWeight: 600 }}>{c.category || 'General'}</span>
+                    <span style={{ color: 'var(--ch-text-muted)', fontSize: 11 }}>→</span>
+                    <span style={{ fontSize: 10, background: (COMPLAINT_STATUS_COLORS[c.status] || '#9ca3af') + '22', color: COMPLAINT_STATUS_COLORS[c.status] || '#9ca3af', padding: '2px 7px', borderRadius: 6, fontWeight: 700 }}>
+                      {c.status === 'IN_PROGRESS' ? 'In Progress' : c.status === 'RESOLVED' ? 'Resolved' : 'Open'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <button onClick={() => setShowComplaintModal(true)} style={{ marginTop: 14, padding: '10px', background: 'var(--ch-body-bg)', border: '1px solid var(--ch-card-border)', borderRadius: 10, fontSize: 12, fontWeight: 700, color: 'var(--ch-text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Plus size={14} color="#f59e0b" /> Raise New Ticket
+          </button>
+        </div>
+
+        {/* Community Notices */}
+        <div className="ch-section" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="ch-section-header">
+            <span className="ch-section-title" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Bell size={15} color="#8b5cf6" /> Community Notices
+            </span>
+            <Link to="/notices" style={{ fontSize: 12, fontWeight: 700, color: '#6366f1', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}>
+              View All <ChevronRight size={12} />
+            </Link>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {displayNotices.length === 0 ? (
+              <div className="ch-empty">
+                <Bell size={28} style={{ opacity: 0.2, margin: '0 auto 8px' }} />
+                <p>No community notices yet</p>
+              </div>
+            ) : displayNotices.map((n, i) => (
+              <div key={n._id} style={{ padding: '10px 12px', background: '#f5f3ff', borderRadius: 12, border: '1px solid #ede9fe', fontSize: 12 }}>
+                <div style={{ fontWeight: 700, color: 'var(--ch-text-primary)', marginBottom: 3 }}>{n.title}</div>
+                <div style={{ fontSize: 11, color: 'var(--ch-text-muted)', lineHeight: 1.4 }}>{n.content}</div>
+              </div>
+            ))}
+          </div>
+
+          <Link to="/events" style={{ marginTop: 14, padding: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, fontSize: 12, fontWeight: 700, color: '#15803d', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, textDecoration: 'none' }}>
+            🎮 Host or Join Resident Games
+          </Link>
+        </div>
+      </div>
+
+      {/* ── CTA Banner ── */}
+      {pendingBill && (
+        <div className="ch-cta-banner">
+          <div className="ch-cta-phone">💳</div>
+          <div className="ch-cta-body">
+            <div className="ch-cta-title">Pay Your Maintenance Easily</div>
+            <div className="ch-cta-sub">Pay securely via UPI, Cards or Net Banking. Stay up-to-date!</div>
+          </div>
+          <button className="ch-cta-btn" onClick={() => setSelectedBillForPayment(pendingBill)}>
+            Pay ₹ {Number(pendingBill.totalAmount).toLocaleString('en-IN')} <ArrowRight size={15} />
+          </button>
+          <div className="ch-cta-building">🏠</div>
+        </div>
+      )}
+
       {/* Modals */}
-      <VisitorPassModal
-        isOpen={showVisitorModal}
-        onClose={() => setShowVisitorModal(false)}
-        onPassCreated={() => fetchResidentData()}
-      />
-
-      <ComplaintModal
-        isOpen={showComplaintModal}
-        onClose={() => setShowComplaintModal(false)}
-        onComplaintCreated={() => fetchResidentData()}
-      />
-
+      <VisitorPassModal isOpen={showVisitorModal} onClose={() => setShowVisitorModal(false)} onPassCreated={fetchData} />
+      <ComplaintModal isOpen={showComplaintModal} onClose={() => setShowComplaintModal(false)} onComplaintCreated={fetchData} />
       {selectedBillForPayment && (
         <RazorpayModal
           isOpen={!!selectedBillForPayment}
           onClose={() => setSelectedBillForPayment(null)}
           bill={selectedBillForPayment}
-          onPaymentSuccess={() => {
-            setSelectedBillForPayment(null);
-            fetchResidentData();
-          }}
+          onPaymentSuccess={() => { setSelectedBillForPayment(null); fetchData(); }}
         />
       )}
-
     </div>
   );
 };
