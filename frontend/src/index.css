@@ -81,7 +81,11 @@ body {
   top: 0;
   flex-shrink: 0;
   z-index: 30;
+  overflow-y: auto;
 }
+
+/* Close button inside sidebar — hidden on desktop */
+.ch-sidebar-close-btn { display: none !important; }
 
 .ch-sidebar-brand {
   padding: 20px 18px 16px;

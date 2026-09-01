@@ -1,58 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
-  LayoutDashboard, Users, Home, Shield,
-  QrCode, AlertCircle, Bell, CreditCard, Calendar,
-  Car, Settings, Building2, FileText,
-  Headphones, Truck, BellRing, ChevronDown, Vote, Tag, X
+  LayoutDashboard, Users, Home, Shield, QrCode,
+  AlertCircle, Bell, CreditCard, Calendar, Car,
+  Settings, Building2, Headphones, Truck, BellRing,
+  Vote, Tag, X, UserCheck, Wrench, LogOut
 } from 'lucide-react';
 
-// Role-specific navigation configs
+/* ── Navigation configs per role ──────────────────────────── */
 const NAV_CONFIG = {
   SUPER_ADMIN: [
-    { label: 'Dashboard',             path: '/',               icon: LayoutDashboard },
-    { label: 'Communities',           path: '/communities',    icon: Building2 },
-    { label: 'Apartments',            path: '/villas',         icon: Home },
-    { label: 'Property Listings',     path: '/listings',       icon: Tag },
+    { label: 'Dashboard',             path: '/',                    icon: LayoutDashboard },
+    { label: 'Communities',           path: '/communities',         icon: Building2 },
+    { label: 'Apartments',            path: '/villas',              icon: Home },
+    { label: 'Property Listings',     path: '/listings',            icon: Tag },
     { label: 'Residents',             path: '/residents-directory', icon: Users },
-    { label: 'Maintenance & Billing', path: '/maintenance',    icon: CreditCard },
-    { label: 'Complaints',            path: '/complaints',     icon: AlertCircle },
-    { label: 'Vehicles',              path: '/vehicles',       icon: Car },
-    { label: 'Visitors',              path: '/visitors',       icon: QrCode },
-    { label: 'Announcements',         path: '/notices',        icon: BellRing },
-    { label: 'Proposals & Voting',    path: '/proposals',      icon: Vote },
-    { label: 'Audit Trail',           path: '/audit-trail',    icon: Shield },
-    { label: 'Profile',               path: '/profile',        icon: Settings },
+    { label: 'Maintenance & Billing', path: '/maintenance',         icon: CreditCard },
+    { label: 'Complaints',            path: '/complaints',          icon: AlertCircle },
+    { label: 'Vehicles',              path: '/vehicles',            icon: Car },
+    { label: 'Visitors',              path: '/visitors',            icon: QrCode },
+    { label: 'Announcements',         path: '/notices',             icon: BellRing },
+    { label: 'Proposals & Voting',    path: '/proposals',           icon: Vote },
+    { label: 'Audit Trail',           path: '/audit-trail',         icon: Shield },
+    { label: 'Profile',               path: '/profile',             icon: Settings },
   ],
   COMMUNITY_ADMIN: [
-    { label: 'Dashboard',             path: '/',               icon: LayoutDashboard },
-    { label: 'Apartments',            path: '/villas',         icon: Home },
+    { label: 'Dashboard',             path: '/',                    icon: LayoutDashboard },
+    { label: 'Apartments',            path: '/villas',              icon: Home },
     { label: 'Residents',             path: '/residents-directory', icon: Users },
-    { label: 'Maintenance & Billing', path: '/maintenance',    icon: CreditCard },
-    { label: 'Complaints',            path: '/complaints',     icon: AlertCircle },
-    { label: 'Vehicles',              path: '/vehicles',       icon: Car },
-    { label: 'Visitors',              path: '/visitors',       icon: QrCode },
-    { label: 'Announcements',         path: '/notices',        icon: BellRing },
-    { label: 'Proposals & Voting',    path: '/proposals',      icon: Vote },
-    { label: 'Audit Trail',           path: '/audit-trail',    icon: Shield },
-    { label: 'Property Listings',     path: '/listings',       icon: Tag },
+    { label: 'Maintenance & Billing', path: '/maintenance',         icon: CreditCard },
+    { label: 'Complaints',            path: '/complaints',          icon: AlertCircle },
+    { label: 'Vehicles',              path: '/vehicles',            icon: Car },
+    { label: 'Visitors',              path: '/visitors',            icon: QrCode },
+    { label: 'Announcements',         path: '/notices',             icon: BellRing },
+    { label: 'Proposals & Voting',    path: '/proposals',           icon: Vote },
+    { label: 'Audit Trail',           path: '/audit-trail',         icon: Shield },
+    { label: 'Property Listings',     path: '/listings',            icon: Tag },
   ],
   RESIDENT: [
-    { label: 'Dashboard',             path: '/',               icon: LayoutDashboard },
-    { label: 'My Maintenance',        path: '/maintenance',    icon: CreditCard },
-    { label: 'My Visitors',           path: '/visitors',       icon: QrCode },
-    { label: 'My Complaints',         path: '/complaints',     icon: AlertCircle },
-    { label: 'Notice Board',          path: '/notices',        icon: Bell },
-    { label: 'Community Events',      path: '/events',         icon: Calendar },
-    { label: 'Proposals & Voting',    path: '/proposals',      icon: Vote },
-    { label: 'Properties for Sale',   path: '/listings',       icon: Tag },
-    { label: 'My Vehicles',           path: '/vehicles',       icon: Car },
-    { label: 'Profile & Family',      path: '/profile',        icon: Settings },
+    { label: 'Dashboard',               path: '/',           icon: LayoutDashboard },
+    { label: 'Guest & Visitor Passes',  path: '/visitors',   icon: UserCheck },
+    { label: 'Helpdesk & Tickets',      path: '/complaints', icon: Wrench },
+    { label: 'Maintenance Payments',    path: '/maintenance',icon: CreditCard },
+    { label: 'Community Events',        path: '/events',     icon: Calendar },
+    { label: 'Notice Board',            path: '/notices',    icon: Bell },
+    { label: 'Proposals & Voting',      path: '/proposals',  icon: Vote },
+    { label: 'Properties for Sale',     path: '/listings',   icon: Tag },
+    { label: 'My Vehicles',             path: '/vehicles',   icon: Car },
+    { label: 'Profile Settings',        path: '/profile',    icon: Settings },
   ],
   SECURITY_GUARD: [
-    { label: 'Dashboard',   path: '/',          icon: LayoutDashboard },
-    { label: 'Gate Security', path: '/security', icon: Shield },
+    { label: 'Dashboard',    path: '/',          icon: LayoutDashboard },
+    { label: 'Gate Security',path: '/security',  icon: Shield },
     { label: 'Visitor Logs', path: '/visitors',  icon: QrCode },
     { label: 'Deliveries',   path: '/visitors',  icon: Truck },
     { label: 'Notice Board', path: '/notices',   icon: Bell },
@@ -67,46 +67,31 @@ const ROLE_LABEL = {
   SECURITY_GUARD: 'Security Guard',
 };
 
-const ROLE_COLOR = {
-  SUPER_ADMIN:    'bg-purple-100 text-purple-700',
-  COMMUNITY_ADMIN:'bg-blue-100 text-blue-700',
-  RESIDENT:       'bg-emerald-100 text-emerald-700',
-  SECURITY_GUARD: 'bg-amber-100 text-amber-700',
-};
-
-// Hook: detect if we are on a mobile viewport
+/* ── Detect mobile via matchMedia ── */
 function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const [mobile, setMobile] = useState(
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)').matches : false
+  );
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
-    const handler = (e) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    const fn = (e) => setMobile(e.matches);
+    mq.addEventListener('change', fn);
+    return () => mq.removeEventListener('change', fn);
   }, []);
-  return isMobile;
+  return mobile;
 }
 
-export const Sidebar = () => {
-  const { user } = useAuth();
-  const role      = user?.role || 'RESIDENT';
-  const navItems  = NAV_CONFIG[role] || NAV_CONFIG.RESIDENT;
+/* ══════════════════════════════════════════════════════════ */
+export const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
+  const { user, logout } = useAuth();
   const location  = useLocation();
   const isMobile  = useIsMobile();
-  const [isOpen, setIsOpen] = useState(false);
+  const role      = user?.role || 'RESIDENT';
+  const navItems  = NAV_CONFIG[role] || NAV_CONFIG.RESIDENT;
 
-  // Listen for hamburger click from Navbar via custom event
-  useEffect(() => {
-    const open = () => setIsOpen(true);
-    window.addEventListener('ch:open-sidebar', open);
-    return () => window.removeEventListener('ch:open-sidebar', open);
-  }, []);
-
-  // Close drawer on route change
-  useEffect(() => { setIsOpen(false); }, [location.pathname]);
-
-  // Deduplicate by label
-  const seen = new Set();
-  const filteredItems = navItems.filter(({ label }) => {
+  /* Deduplicate */
+  const seen  = new Set();
+  const items = navItems.filter(({ label }) => {
     if (seen.has(label)) return false;
     seen.add(label);
     return true;
@@ -116,125 +101,231 @@ export const Sidebar = () => {
     ? user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
 
-  /* ── Inline styles — 100% React-controlled, no CSS-class dependency ── */
-  const sidebarStyle = isMobile ? {
-    position:   'fixed',
-    top:        0,
-    left:       0,
-    bottom:     0,
-    height:     '100vh',
-    width:      '270px',
-    zIndex:     400,
-    background: '#ffffff',
-    borderRight:'1px solid #e8eaf0',
-    display:    'flex',
-    flexDirection: 'column',
-    overflowY:  'auto',
-    transform:  isOpen ? 'translateX(0)' : 'translateX(-110%)',
-    transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
-    boxShadow:  isOpen ? '4px 0 40px rgba(0,0,0,0.18)' : 'none',
-  } : {
-    width:      'var(--ch-sidebar-w)',
-    background: 'var(--ch-sidebar-bg)',
-    borderRight:'1px solid var(--ch-sidebar-border)',
-    display:    'flex',
-    flexDirection:'column',
-    minHeight:  '100vh',
-    position:   'sticky',
-    top:        0,
-    flexShrink: 0,
-    zIndex:     30,
+  /* Escape key */
+  const handleKey = useCallback((e) => { if (e.key === 'Escape') onClose(); }, [onClose]);
+  useEffect(() => {
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [handleKey]);
+
+  /* Route change → close */
+  useEffect(() => { onClose(); }, [location.pathname]);
+
+  /* Body scroll lock on mobile when open */
+  useEffect(() => {
+    if (isMobile) {
+      document.body.style.overflow = isOpen ? 'hidden' : '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen, isMobile]);
+
+  /* ─────────────────────────────────────────────────────────
+     INLINE STYLES — pure React, zero CSS class dependency
+  ───────────────────────────────────────────────────────── */
+  const backdropStyle = {
+    display:       isMobile ? 'block' : 'none',
+    position:      'fixed',
+    top:           0, left: 0, right: 0, bottom: 0,
+    background:    'rgba(0, 0, 0, 0.55)',
+    backdropFilter:'blur(2px)',
+    zIndex:        9998,
+    opacity:       isOpen ? 1 : 0,
+    pointerEvents: isOpen ? 'auto' : 'none',
+    transition:    'opacity 0.28s ease',
   };
 
-  const overlayStyle = {
-    display:    (isMobile && isOpen) ? 'block' : 'none',
-    position:   'fixed',
-    inset:      0,
-    background: 'rgba(0,0,0,0.50)',
-    zIndex:     399,
-  };
+  const sidebarStyle = isMobile
+    ? {
+        /* Mobile: fixed drawer from left */
+        position:   'fixed',
+        top:        0,
+        left:       0,
+        height:     '100vh',
+        width:      '280px',
+        zIndex:     9999,
+        background: '#ffffff',
+        borderRight:'1px solid #e8eaf0',
+        boxShadow:  '6px 0 40px rgba(0,0,0,0.20)',
+        display:    'flex',
+        flexDirection:'column',
+        overflowY:  'auto',
+        overflowX:  'hidden',
+        transform:  isOpen ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+        willChange: 'transform',
+      }
+    : {
+        /* Desktop: sticky sidebar */
+        width:         'var(--ch-sidebar-w)',
+        background:    'var(--ch-sidebar-bg)',
+        borderRight:   '1px solid var(--ch-sidebar-border)',
+        display:       'flex',
+        flexDirection: 'column',
+        minHeight:     '100vh',
+        position:      'sticky',
+        top:           0,
+        flexShrink:    0,
+        zIndex:        30,
+        overflowY:     'auto',
+      };
 
   return (
     <>
-      {/* Backdrop overlay — closes drawer on tap */}
-      <div style={overlayStyle} onClick={() => setIsOpen(false)} aria-hidden="true" />
+      {/* ── Dark backdrop (mobile only) ── */}
+      <div style={backdropStyle} onClick={onClose} aria-hidden="true" />
 
+      {/* ── Sidebar panel ── */}
       <aside style={sidebarStyle}>
-        {/* Brand + Close button */}
-        <div className="ch-sidebar-brand" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <Link to="/" className="ch-brand-link" onClick={() => setIsOpen(false)}>
-            <div className="ch-brand-icon"><Building2 size={22} /></div>
+
+        {/* Brand + Close */}
+        <div style={{
+          padding: '16px 18px',
+          borderBottom: '1px solid #e8eaf0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          flexShrink: 0,
+        }}>
+          <Link
+            to="/"
+            onClick={onClose}
+            style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none' }}
+          >
+            <div style={{
+              width:38, height:38, borderRadius:10,
+              background:'linear-gradient(135deg,#6366f1,#8b5cf6)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              color:'#fff', flexShrink:0,
+              boxShadow:'0 4px 12px rgba(99,102,241,0.35)',
+            }}>
+              <Building2 size={22} color="#fff" />
+            </div>
             <div>
-              <span className="ch-brand-name">CommunityHub</span>
-              <span className="ch-brand-tagline">Smart Living, Better Together</span>
+              <span style={{ display:'block', fontSize:14, fontWeight:800, color:'#1a1a2e', letterSpacing:'-0.3px' }}>
+                CommunityHub
+              </span>
+              <span style={{ display:'block', fontSize:10, color:'#6b7280', fontWeight:500, marginTop:1 }}>
+                Smart Living, Better Together
+              </span>
             </div>
           </Link>
-          {/* Mobile close button */}
+
+          {/* Close button — always rendered, hidden on desktop via display:none */}
           {isMobile && (
             <button
-              onClick={() => setIsOpen(false)}
-              style={{
-                width:36, height:36, border:'1px solid #e8eaf0', borderRadius:9,
-                background:'#f5f6fa', cursor:'pointer', display:'flex',
-                alignItems:'center', justifyContent:'center', color:'#4b5563',
-                flexShrink:0, marginLeft:8
-              }}
+              onClick={onClose}
               aria-label="Close menu"
+              style={{
+                width:34, height:34, border:'1px solid #e8eaf0', borderRadius:9,
+                background:'#f5f6fa', cursor:'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                color:'#4b5563', flexShrink:0,
+              }}
             >
-              <X size={18} />
+              <X size={17} />
             </button>
           )}
         </div>
 
-        {/* Nav items */}
-        <nav className="ch-sidebar-nav">
-          {filteredItems.map(item => {
-            const Icon = item.icon;
-            const isActive = item.path === '/'
-              ? location.pathname === '/'
-              : location.pathname.startsWith(item.path);
-            return (
-              <NavLink
-                key={item.label}
-                to={item.path}
-                end={item.path === '/'}
-                onClick={() => setIsOpen(false)}
-                className={`ch-nav-item${isActive ? ' ch-nav-item--active' : ''}`}
-              >
-                <Icon size={18} className="ch-nav-icon" />
-                <span style={{ flex:1 }}>{item.label}</span>
-              </NavLink>
-            );
-          })}
+        {/* User identity strip */}
+        <div style={{
+          padding: '12px 16px',
+          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexShrink: 0,
+        }}>
+          <div style={{
+            width:40, height:40, borderRadius:12,
+            background:'rgba(255,255,255,0.22)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:15, fontWeight:800, color:'#fff', flexShrink:0,
+          }}>
+            {initials}
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontWeight:800, fontSize:13, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {user?.name || 'User'}
+            </div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.75)', marginTop:1 }}>
+              {ROLE_LABEL[role]}
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation items */}
+        <nav style={{ padding:'10px 10px', display:'flex', flexDirection:'column', gap:2, flex:1, overflowY:'auto' }}>
+          {items.map(({ label, path, icon: Icon }) => (
+            <NavLink
+              key={label}
+              to={path}
+              end={path === '/'}
+              onClick={onClose}
+              style={({ isActive }) => ({
+                display:        'flex',
+                alignItems:     'center',
+                gap:            10,
+                padding:        '9px 12px',
+                borderRadius:   10,
+                fontSize:       13,
+                fontWeight:     600,
+                textDecoration: 'none',
+                transition:     'all 0.15s ease',
+                cursor:         'pointer',
+                color:          isActive ? '#ffffff' : '#4b5563',
+                background:     isActive ? '#6366f1' : 'transparent',
+                boxShadow:      isActive ? '0 4px 12px rgba(99,102,241,0.3)' : 'none',
+              })}
+            >
+              <Icon size={18} style={{ flexShrink:0 }} />
+              <span style={{ flex:1 }}>{label}</span>
+            </NavLink>
+          ))}
         </nav>
 
-        <div className="ch-sidebar-spacer" />
+        {/* Spacer */}
+        <div style={{ flex:'0 0 8px' }} />
 
         {/* Footer */}
-        <div className="ch-sidebar-footer">
-          <div className="ch-help-card">
-            <div className="ch-help-header">
-              <Headphones size={16} className="ch-help-icon" />
-              <span className="ch-help-title">Need Help?</span>
+        <div style={{
+          padding:'12px 10px 16px',
+          borderTop:'1px solid #e8eaf0',
+          display:'flex', flexDirection:'column', gap:10,
+          flexShrink:0,
+        }}>
+          {/* Need Help card */}
+          <div style={{
+            background:'linear-gradient(135deg,#1e1b4b,#312e81)',
+            borderRadius:14, padding:14, color:'#fff',
+          }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:3 }}>
+              <Headphones size={16} color="#a5b4fc" />
+              <span style={{ fontSize:12, fontWeight:700 }}>Need Help?</span>
             </div>
-            <p className="ch-help-sub">We're here to help you</p>
-            <button className="ch-help-btn">Contact Support</button>
+            <p style={{ fontSize:10, color:'#c7d2fe', marginBottom:10 }}>We're here to help you</p>
+            <button style={{
+              width:'100%', padding:'7px 0',
+              background:'rgba(255,255,255,0.12)',
+              border:'1px solid rgba(255,255,255,0.2)',
+              borderRadius:8, color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer',
+            }}>Contact Support</button>
           </div>
-          <div className="ch-user-row">
-            <div
-              className="ch-user-avatar"
-              style={role === 'SUPER_ADMIN' ? { background:'linear-gradient(135deg,#7c3aed,#4f46e5)' } : {}}
-            >
-              {initials}
-            </div>
-            <div className="ch-user-info">
-              <span className="ch-user-name">{user?.name || 'User'}</span>
-              <span className={`ch-user-role ${ROLE_COLOR[role]}`}>
-                {role === 'SUPER_ADMIN' && '👑 '}{ROLE_LABEL[role]}
-              </span>
-            </div>
-            <ChevronDown size={14} className="ch-user-chevron" />
-          </div>
+
+          {/* Sign Out */}
+          <button
+            onClick={() => { onClose(); logout(); }}
+            style={{
+              display:'flex', alignItems:'center', gap:10, width:'100%',
+              padding:'10px 12px', borderRadius:10,
+              background:'#fef2f2', border:'1px solid #fca5a5',
+              color:'#ef4444', fontSize:13, fontWeight:700, cursor:'pointer',
+            }}
+          >
+            <LogOut size={16} />
+            Sign Out
+          </button>
         </div>
       </aside>
     </>

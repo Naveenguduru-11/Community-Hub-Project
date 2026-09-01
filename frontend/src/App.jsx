@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -68,13 +68,15 @@ const MainDashboardRouter = () => {
 
 // Main App Layout Structure
 const AppLayout = () => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="ch-shell">
-      <Sidebar />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="ch-main-area">
         <DemoRoleBar />
         <EmergencyBanner />
-        <Navbar />
+        <Navbar onOpenSidebar={() => setSidebarOpen(true)} />
         <main className="ch-page-content">
           <Routes>
             <Route path="/" element={<MainDashboardRouter />} />
