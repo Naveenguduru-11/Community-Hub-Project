@@ -29,6 +29,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { ProposalsPage } from './pages/ProposalsPage';
 import { AuditTrailPage } from './pages/AuditTrailPage';
 import { ListingsPage } from './pages/ListingsPage';
+import { VehiclesPage } from './pages/VehiclesPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
@@ -104,7 +105,7 @@ const AppLayout = () => {
             <Route path="/maintenance" element={<MaintenancePage />} />
             <Route path="/events" element={<EventsPage />} />
             <Route path="/villas" element={<VillaDirectoryPage />} />
-            <Route path="/vehicles" element={<ProfilePage />} />
+            <Route path="/vehicles" element={<VehiclesPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/proposals" element={<ProposalsPage />} />
             <Route path="/audit-trail" element={<AuditTrailPage />} />
