@@ -41,6 +41,7 @@ const NAV_CONFIG = {
     { label: 'Proposals & Voting',    path: '/proposals',           icon: Vote },
     { label: 'Audit Trail',           path: '/audit-trail',         icon: Shield },
     { label: 'Property Listings',     path: '/listings',            icon: Tag },
+    { label: 'Profile',               path: '/profile',             icon: Settings },
   ],
   RESIDENT: [
     { label: 'Dashboard',               path: '/',            icon: LayoutDashboard },
