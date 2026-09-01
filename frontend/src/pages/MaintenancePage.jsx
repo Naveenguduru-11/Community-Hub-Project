@@ -70,7 +70,7 @@ function StatCard({ icon: Icon, label, value, color, sub }) {
 }
 
 // Resident row card in the admin payment history table
-function ResidentRow({ entry, onEditBill, onDeleteBill }) {
+function ResidentRow({ entry, onEditBill, onDeleteBill, onStatusChange }) {
   const [expanded, setExpanded] = useState(false);
   const hasDue = entry.totalDue > 0;
 
@@ -132,7 +132,7 @@ function ResidentRow({ entry, onEditBill, onDeleteBill }) {
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--ch-text-primary)' }}>{fmt(bill.totalAmount)}</span>
                   <span className="maint-status-badge" style={{ background: st.bg, color: st.text, border: `1px solid ${st.border}` }}>{st.label}</span>
                   {bill.razorpayPaymentId && (
@@ -140,6 +140,38 @@ function ResidentRow({ entry, onEditBill, onDeleteBill }) {
                       {bill.razorpayPaymentId}
                     </span>
                   )}
+                  {/* ── Quick status toggle ── */}
+                  {bill.status !== 'PAID'
+                    ? (
+                      <button
+                        onClick={() => onStatusChange(bill._id, 'PAID')}
+                        title="Mark as Paid"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '4px 10px', borderRadius: 8, cursor: 'pointer',
+                          fontSize: 11, fontWeight: 800,
+                          background: '#10b98118', color: '#34d399',
+                          border: '1px solid #10b98144',
+                        }}
+                      >
+                        <CheckCircle2 size={12} /> Mark Paid
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onStatusChange(bill._id, 'PENDING')}
+                        title="Mark as Unpaid"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '4px 10px', borderRadius: 8, cursor: 'pointer',
+                          fontSize: 11, fontWeight: 800,
+                          background: '#f59e0b18', color: '#fbbf24',
+                          border: '1px solid #f59e0b44',
+                        }}
+                      >
+                        <AlertCircle size={12} /> Mark Unpaid
+                      </button>
+                    )
+                  }
                   <button className="maint-icon-btn maint-icon-btn--edit" onClick={() => onEditBill(bill)} title="Edit">
                     <Edit2 size={12} />
                   </button>
@@ -307,6 +339,41 @@ export const MaintenancePage = () => {
   const handleDelete = async (id, title) => {
     if (!confirm(`Delete bill "${title}"?`)) return;
     try { await paymentService.deleteBill(id); fetchData(); } catch { alert('Failed to delete.'); }
+  };
+
+  // ── Admin: quick status change (Mark Paid / Mark Unpaid) ──
+  const handleStatusChange = async (billId, newStatus) => {
+    try {
+      await paymentService.updateBill(billId, {
+        status: newStatus,
+        ...(newStatus === 'PAID' ? { paidDate: new Date().toISOString() } : { paidDate: null }),
+      });
+      // Optimistically update local state so UI reflects change immediately
+      setSummary(prev => prev.map(entry => ({
+        ...entry,
+        bills: entry.bills.map(b =>
+          b._id === billId
+            ? { ...b, status: newStatus, paidDate: newStatus === 'PAID' ? new Date() : null }
+            : b
+        ),
+        totalDue: entry.bills
+          .map(b => b._id === billId ? { ...b, status: newStatus } : b)
+          .filter(b => b.status !== 'PAID')
+          .reduce((s, b) => s + (b.totalAmount || 0), 0),
+        totalPaid: entry.bills
+          .map(b => b._id === billId ? { ...b, status: newStatus } : b)
+          .filter(b => b.status === 'PAID')
+          .reduce((s, b) => s + (b.totalAmount || 0), 0),
+      })));
+      setAllPayments(prev => prev.map(b =>
+        b._id === billId
+          ? { ...b, status: newStatus, paidDate: newStatus === 'PAID' ? new Date() : null }
+          : b
+      ));
+    } catch (err) {
+      alert('Failed to update payment status. Please try again.');
+      fetchData(); // Re-sync from server on error
+    }
   };
 
   // ── Admin: update rate ──
@@ -532,6 +599,7 @@ export const MaintenancePage = () => {
                   entry={entry}
                   onEditBill={handleOpenEdit}
                   onDeleteBill={handleDelete}
+                  onStatusChange={handleStatusChange}
                 />
               ))}
             </div>
