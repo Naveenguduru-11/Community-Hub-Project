@@ -19,7 +19,8 @@ export const Login = () => {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Account not found or wrong password.');
+      const msg = err.response?.data?.message;
+      setError(msg || 'Login failed. Please check your email and password, then try again.');
     } finally {
       setLoading(false);
     }

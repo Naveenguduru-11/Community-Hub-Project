@@ -18,26 +18,39 @@ exports.generateBills = async (req, res, next) => {
     const isConnected = mongoose.connection.readyState === 1;
 
     if (isConnected) {
-      const villas = await Villa.find({ 
-        occupancyStatus: { $in: ['OWNER_OCCUPIED', 'TENANT_OCCUPIED'] } 
-      }).populate('owner tenant');
+      const Villa = require('../models/Villa');
+      const User = require('../models/User');
 
+      const villas = await Villa.find().populate('owner tenant');
       const createdBills = [];
+
       for (const villa of villas) {
-        const residentUser = villa.tenant || villa.owner;
+        let residentUser = villa.tenant || villa.owner;
+
+        if (!residentUser) {
+          residentUser = await User.findOne({
+            role: 'RESIDENT',
+            $or: [
+              { villa: villa._id },
+              { villaNumber: villa.villaNumber }
+            ]
+          });
+        }
+
         const receiptNumber = `INV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
         const bill = await Payment.create({
           title: `Monthly Maintenance Fee - ${month || 'August 2026'}`,
           billType: 'MAINTENANCE',
           month: month || 'August 2026',
-          amount: amount || 4500,
-          totalAmount: amount || 4500,
+          amount: Number(amount) || 4500,
+          totalAmount: Number(amount) || 4500,
           dueDate: dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-          resident: residentUser ? residentUser._id : null,
+          resident: residentUser ? (residentUser._id || residentUser) : null,
           villa: villa._id,
-          community: villa.community,
-          receiptNumber
+          community: villa.community || req.user.community,
+          receiptNumber,
+          isAdminIssued: true
         });
         createdBills.push(bill);
       }
@@ -49,8 +62,8 @@ exports.generateBills = async (req, res, next) => {
         title: `Monthly Maintenance Fee - ${month || 'August 2026'}`,
         billType: 'MAINTENANCE',
         month: month || 'August 2026',
-        amount: amount || 4500,
-        totalAmount: amount || 4500,
+        amount: Number(amount) || 4500,
+        totalAmount: Number(amount) || 4500,
         status: 'PENDING',
         dueDate: dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
         resident: { _id: req.user._id, name: req.user.name, email: req.user.email },
@@ -72,7 +85,45 @@ exports.createCustomBill = async (req, res, next) => {
     const receiptNumber = `INV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
     const isConnected = mongoose.connection.readyState === 1;
 
-    if (isConnected && mongoose.Types.ObjectId.isValid(villaId)) {
+    if (isConnected) {
+      const Villa = require('../models/Villa');
+      const User = require('../models/User');
+
+      let targetVilla = null;
+      if (villaId && mongoose.Types.ObjectId.isValid(villaId)) {
+        targetVilla = await Villa.findById(villaId).populate('owner tenant');
+      } else if (villaId) {
+        targetVilla = await Villa.findOne({ villaNumber: villaId }).populate('owner tenant');
+      }
+
+      let targetResidentId = residentId;
+      if (!targetResidentId && targetVilla) {
+        targetResidentId = targetVilla.owner?._id || targetVilla.tenant?._id || targetVilla.owner || targetVilla.tenant;
+      }
+
+      // If villa has no direct owner link, find resident registered with this villa ID or villaNumber
+      if (!targetResidentId && targetVilla) {
+        const residentUser = await User.findOne({
+          role: 'RESIDENT',
+          $or: [
+            { villa: targetVilla._id },
+            { villaNumber: targetVilla.villaNumber }
+          ]
+        });
+        if (residentUser) {
+          targetResidentId = residentUser._id;
+          if (!targetVilla.owner) {
+            targetVilla.owner = residentUser._id;
+            await targetVilla.save();
+          }
+        }
+      }
+
+      // If still not found, check if there is an active resident in the community
+      if (!targetResidentId && req.user.role === 'RESIDENT') {
+        targetResidentId = req.user._id;
+      }
+
       const bill = await Payment.create({
         title: title || 'Custom Society Charge',
         billType: billType || 'UTILITY',
@@ -80,11 +131,12 @@ exports.createCustomBill = async (req, res, next) => {
         amount: Number(amount) || 1000,
         totalAmount: Number(amount) || 1000,
         dueDate: dueDate || new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
-        resident: residentId || req.user._id,
-        villa: villaId,
-        community: req.user.community,
+        resident: targetResidentId || null,
+        villa: targetVilla?._id || (mongoose.Types.ObjectId.isValid(villaId) ? villaId : null),
+        community: targetVilla?.community || req.user.community,
         receiptNumber,
-        adminNotes: adminNotes || ''
+        adminNotes: adminNotes || '',
+        isAdminIssued: true
       });
 
       const populated = await Payment.findById(bill._id)
@@ -93,6 +145,7 @@ exports.createCustomBill = async (req, res, next) => {
 
       return res.status(201).json({ success: true, bill: populated });
     } else {
+      let residentInfo = { _id: req.user._id, name: req.user.name, email: req.user.email };
       const bill = {
         _id: `pay_${Date.now()}`,
         title: title || 'Custom Society Charge',
@@ -102,7 +155,7 @@ exports.createCustomBill = async (req, res, next) => {
         totalAmount: Number(amount) || 1000,
         status: 'PENDING',
         dueDate: dueDate || new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
-        resident: { _id: req.user._id, name: req.user.name, email: req.user.email },
+        resident: residentInfo,
         villa: { _id: villaId || 'villa_101', villaNumber: 'V-101', block: 'Phase 1' },
         receiptNumber,
         adminNotes: adminNotes || ''
@@ -114,6 +167,7 @@ exports.createCustomBill = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // Edit Existing Bill - Admin feature (Increase/Decrease Amount & Add Notes)
 exports.updateBill = async (req, res, next) => {
@@ -273,60 +327,124 @@ exports.getPayments = async (req, res, next) => {
   try {
     const isConnected = mongoose.connection.readyState === 1;
 
+    // Residents: only see bills explicitly issued by admin (isAdminIssued:true)
+    // Admins: see all community bills
+    let filter = {};
+    if (req.user?.role === 'RESIDENT') {
+      const orConditions = [{ resident: req.user._id }];
+      if (req.user.villa && mongoose.Types.ObjectId.isValid(req.user.villa)) {
+        orConditions.push({ villa: req.user.villa });
+      }
+      // KEY FIX: only return bills that admin explicitly issued
+      filter = { $and: [{ $or: orConditions }, { isAdminIssued: true }] };
+    } else if (req.user?.community && mongoose.Types.ObjectId.isValid(req.user.community)) {
+      filter = { community: req.user.community };
+    }
+
     if (isConnected) {
-      let payments = await Payment.find()
-        .populate('resident', 'name email phone')
+      const payments = await Payment.find(filter)
+        .populate('resident', 'name email phone villaNumber')
         .populate('villa', 'villaNumber block')
         .sort({ createdAt: -1 });
 
-      if (payments.length === 0) {
-        // Seed default initial maintenance bills for residents
-        const sample1 = await Payment.create({
-          title: 'Monthly Maintenance Fee - August 2026',
-          billType: 'MAINTENANCE',
-          month: 'August 2026',
-          amount: 4500,
-          totalAmount: 4500,
-          status: 'PENDING',
-          dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-          resident: req.user?._id || null,
-          receiptNumber: `INV-${Date.now()}-4500`
-        });
-
-        const sample2 = await Payment.create({
-          title: 'Common Amenities & Clubhouse Tariff',
-          billType: 'AMENITY',
-          month: 'August 2026',
-          amount: 1500,
-          totalAmount: 1500,
-          status: 'PENDING',
-          dueDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
-          resident: req.user?._id || null,
-          receiptNumber: `INV-${Date.now()}-1500`
-        });
-
-        payments = [sample1, sample2];
-      }
-
-      const uniquePayments = Array.from(new Map(payments.map(item => [item.receiptNumber || item._id.toString(), item])).values());
+      const uniquePayments = Array.from(
+        new Map(payments.map(item => [item.receiptNumber || item._id.toString(), item])).values()
+      );
       return res.status(200).json({ success: true, count: uniquePayments.length, payments: uniquePayments });
     } else {
-      if (memoryPayments.length === 0) {
-        memoryPayments.push({
-          _id: `pay_${Date.now()}_1`,
-          title: 'Monthly Maintenance Fee - August 2026',
-          billType: 'MAINTENANCE',
-          month: 'August 2026',
-          amount: 4500,
-          totalAmount: 4500,
-          status: 'PENDING',
-          dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-          resident: { _id: req.user?._id, name: req.user?.name, email: req.user?.email },
-          receiptNumber: `INV-${Date.now()}-4500`
+      // Memory fallback — only show isAdminIssued bills
+      let filtered = memoryPayments;
+      if (req.user?.role === 'RESIDENT') {
+        filtered = memoryPayments.filter(p => {
+          if (!p.isAdminIssued) return false;
+          const residentId = p.resident?._id?.toString() || p.resident?.toString();
+          const villaId = p.villa?._id?.toString() || p.villa?.toString();
+          const userVillaId = req.user.villa?._id?.toString() || req.user.villa?.toString();
+          return residentId === req.user._id?.toString() || (userVillaId && villaId === userVillaId);
         });
       }
-      const uniquePayments = Array.from(new Map(memoryPayments.map(item => [item.receiptNumber || item._id, item])).values());
+      const uniquePayments = Array.from(
+        new Map(filtered.map(item => [item.receiptNumber || item._id, item])).values()
+      );
       return res.status(200).json({ success: true, count: uniquePayments.length, payments: uniquePayments });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/payments/purge-phantom — admin only: removes all auto-seeded phantom bills from DB
+exports.purgePhantomBills = async (req, res, next) => {
+  try {
+    const isConnected = mongoose.connection.readyState === 1;
+    if (isConnected) {
+      const result = await Payment.deleteMany({ isAdminIssued: { $ne: true } });
+      return res.json({ success: true, deleted: result.deletedCount, message: `Removed ${result.deletedCount} phantom auto-seeded bills from the database.` });
+    } else {
+      const before = memoryPayments.length;
+      memoryPayments = memoryPayments.filter(p => p.isAdminIssued === true);
+      return res.json({ success: true, deleted: before - memoryPayments.length });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// GET /api/payments/summary — admin: per-resident payment summary grouped by villa
+exports.getPaymentSummary = async (req, res, next) => {
+  try {
+    const isConnected = mongoose.connection.readyState === 1;
+
+    if (isConnected) {
+      const filter = req.user?.community && mongoose.Types.ObjectId.isValid(req.user.community)
+        ? { community: req.user.community }
+        : {};
+
+      const payments = await Payment.find(filter)
+        .populate('resident', 'name email phone villaNumber avatar')
+        .populate('villa', 'villaNumber block')
+        .sort({ createdAt: -1 });
+
+      // Group by resident
+      const grouped = {};
+      for (const p of payments) {
+        const key = p.resident?._id?.toString() || p.villa?._id?.toString() || 'unknown';
+        if (!grouped[key]) {
+          grouped[key] = {
+            resident: p.resident,
+            villa: p.villa,
+            bills: [],
+            totalDue: 0,
+            totalPaid: 0
+          };
+        }
+        grouped[key].bills.push(p);
+        if (p.status === 'PAID') {
+          grouped[key].totalPaid += p.totalAmount || 0;
+        } else {
+          grouped[key].totalDue += p.totalAmount || 0;
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        summary: Object.values(grouped),
+        allPayments: payments
+      });
+    } else {
+      // Memory fallback grouped summary
+      const grouped = {};
+      for (const p of memoryPayments) {
+        const key = p.resident?._id?.toString() || p.villa?._id?.toString() || 'unknown';
+        if (!grouped[key]) {
+          grouped[key] = { resident: p.resident, villa: p.villa, bills: [], totalDue: 0, totalPaid: 0 };
+        }
+        grouped[key].bills.push(p);
+        if (p.status === 'PAID') grouped[key].totalPaid += p.totalAmount || 0;
+        else grouped[key].totalDue += p.totalAmount || 0;
+      }
+      return res.status(200).json({ success: true, summary: Object.values(grouped), allPayments: memoryPayments });
     }
   } catch (error) {
     next(error);

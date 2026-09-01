@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { paymentService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { CreditCard, CheckCircle2, ShieldCheck, X, Key, ExternalLink } from 'lucide-react';
 
 export const RazorpayModal = ({ isOpen, onClose, bill, onPaymentSuccess }) => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [successReceipt, setSuccessReceipt] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -62,9 +64,9 @@ export const RazorpayModal = ({ isOpen, onClose, bill, onPaymentSuccess }) => {
             }
           },
           prefill: {
-            name: bill.resident?.name || 'Aarav Mehta',
-            email: bill.resident?.email || 'resident@greenfield.com',
-            contact: '+91 91234 56789'
+            name: bill.resident?.name || user?.name || '',
+            email: bill.resident?.email || user?.email || '',
+            contact: bill.resident?.phone || user?.phone || ''
           },
           theme: {
             color: '#2563eb'

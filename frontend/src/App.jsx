@@ -26,6 +26,9 @@ import { EventsPage } from './pages/EventsPage';
 import { VillaDirectoryPage } from './pages/VillaDirectoryPage';
 import { ResidentDirectoryPage } from './pages/ResidentDirectoryPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ProposalsPage } from './pages/ProposalsPage';
+import { AuditTrailPage } from './pages/AuditTrailPage';
+import { ListingsPage } from './pages/ListingsPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
@@ -51,8 +54,9 @@ const MainDashboardRouter = () => {
 
   switch (user.role) {
     case 'SUPER_ADMIN':
-      return <SuperAdminDashboard />;
     case 'COMMUNITY_ADMIN':
+      // Both admin roles see the same full community dashboard.
+      // SUPER_ADMIN gets 'Communities' in the sidebar for multi-community mgmt.
       return <CommunityAdminDashboard />;
     case 'SECURITY_GUARD':
       return <GuardDashboard />;
@@ -65,16 +69,16 @@ const MainDashboardRouter = () => {
 // Main App Layout Structure
 const AppLayout = () => {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white transition-colors duration-200">
-      <DemoRoleBar />
-      <EmergencyBanner />
-      <Navbar />
-
-      <div className="flex flex-1">
-        <Sidebar />
-        <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden">
+    <div className="ch-shell">
+      <Sidebar />
+      <div className="ch-main-area">
+        <DemoRoleBar />
+        <EmergencyBanner />
+        <Navbar />
+        <main className="ch-page-content">
           <Routes>
             <Route path="/" element={<MainDashboardRouter />} />
+            <Route path="/communities" element={<SuperAdminDashboard />} />
             <Route path="/security" element={<GuardDashboard />} />
             <Route path="/guard" element={<GuardDashboard />} />
             <Route path="/gate-security" element={<GuardDashboard />} />
@@ -87,6 +91,9 @@ const AppLayout = () => {
             <Route path="/villas" element={<VillaDirectoryPage />} />
             <Route path="/vehicles" element={<ProfilePage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/proposals" element={<ProposalsPage />} />
+            <Route path="/audit-trail" element={<AuditTrailPage />} />
+            <Route path="/listings" element={<ListingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
