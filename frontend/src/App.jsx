@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { SocketProvider } from './context/SocketContext';
@@ -66,6 +66,19 @@ const MainDashboardRouter = () => {
   }
 };
 
+/* ── Scroll to top on every route change ── */
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    // Scroll window to top
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    // Also scroll the inner page content container (it has overflow-y: auto)
+    const content = document.querySelector('.ch-page-content');
+    if (content) content.scrollTop = 0;
+  }, [pathname]);
+  return null;
+};
+
 // Main App Layout Structure
 const AppLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -110,6 +123,7 @@ export default function App() {
       <AuthProvider>
         <SocketProvider>
           <Router>
+            <ScrollToTop />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
