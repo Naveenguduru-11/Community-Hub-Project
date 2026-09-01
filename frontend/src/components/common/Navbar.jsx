@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { Bell, ShieldAlert, LogOut, User, Search } from 'lucide-react';
+import { Bell, ShieldAlert, LogOut, User, Search, Menu } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { openSidebar } from './Sidebar';
 
 const ROLE_WELCOME = {
   SUPER_ADMIN: 'Super Admin',
@@ -37,6 +38,15 @@ export const Navbar = () => {
 
   return (
     <header className="ch-navbar">
+      {/* Hamburger — mobile only */}
+      <button
+        className="ch-hamburger"
+        onClick={() => openSidebar()}
+        aria-label="Open navigation menu"
+      >
+        <Menu size={18} />
+      </button>
+
       {/* Welcome + Subtitle */}
       <div className="ch-navbar-welcome">
         <h1 className="ch-navbar-title">
@@ -47,7 +57,7 @@ export const Navbar = () => {
 
       {/* Right Controls */}
       <div className="ch-navbar-controls">
-        {/* Search */}
+        {/* Search — hidden on mobile via CSS */}
         <div className="ch-search-wrap">
           <Search size={15} className="ch-search-icon" />
           <input
@@ -92,11 +102,10 @@ export const Navbar = () => {
           )}
         </div>
 
-        {/* Date */}
+        {/* Date — hidden on mobile via CSS */}
         <div className="ch-date-pill">
           📅 {getTodayString()}
         </div>
-
 
         {/* SOS */}
         <button

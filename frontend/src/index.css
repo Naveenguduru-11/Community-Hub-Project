@@ -1815,3 +1815,231 @@ body {
   .listings-form-section { grid-template-columns: 1fr; }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN — MOBILE-FIRST
+   Breakpoints: 1024px | 768px | 600px | 480px | 375px
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Sidebar Mobile Drawer ──────────────────────────────────── */
+.ch-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 29;
+  animation: fadeIn 0.2s ease;
+}
+
+.ch-hamburger {
+  display: none;
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  background: var(--ch-body-bg);
+  border: 1px solid var(--ch-card-border);
+  color: var(--ch-text-primary);
+  align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── Tablet (≤1024px) ───────────────────────────────────────── */
+@media (max-width: 1024px) {
+  :root { --ch-sidebar-w: 210px; }
+
+  .ch-stat-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .ch-stat-grid--3 { grid-template-columns: repeat(2, 1fr); }
+  .ch-quick-grid { grid-template-columns: repeat(4, 1fr); }
+  .ch-row-2 { grid-template-columns: 1fr; }
+  .ch-row-3 { grid-template-columns: 1fr 1fr; }
+  .ch-page-content { padding: 20px 20px; }
+  .ch-navbar { padding: 14px 20px; }
+
+  .ch-search-input { width: 160px; }
+  .ch-date-pill { display: none; }
+
+  .proposals-stats { grid-template-columns: repeat(2, 1fr); }
+  .listings-stats  { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Mobile (≤768px) ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Show hamburger, hide persistent sidebar */
+  .ch-hamburger { display: flex; }
+
+  /* Sidebar becomes a fixed drawer */
+  .ch-sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+    min-height: 100vh;
+    overflow-y: auto;
+    width: 260px !important;
+  }
+  .ch-sidebar--open { transform: translateX(0); }
+  .ch-sidebar-overlay { display: block; }
+
+  /* Main area takes full width */
+  .ch-shell { flex-direction: column; }
+  .ch-main-area { width: 100%; }
+  .ch-page-content { padding: 16px 14px; }
+
+  /* Navbar */
+  .ch-navbar { padding: 12px 14px; gap: 8px; flex-wrap: wrap; }
+  .ch-navbar-welcome { flex: 1; min-width: 0; }
+  .ch-navbar-title { font-size: 15px; }
+  .ch-navbar-subtitle { display: none; }
+  .ch-navbar-controls { gap: 6px; }
+  .ch-search-wrap { display: none; }
+  .ch-date-pill { display: none; }
+
+  /* Stat grid → 2 columns */
+  .ch-stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  .ch-stat-grid--3 { grid-template-columns: repeat(2, 1fr); }
+  .ch-stat-card { padding: 14px; gap: 12px; }
+  .ch-stat-icon { width: 42px; height: 42px; }
+  .ch-stat-value { font-size: 20px; }
+  .ch-stat-value--sm { font-size: 16px; }
+
+  /* Quick actions → 3 columns */
+  .ch-quick-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .ch-quick-btn { padding: 12px 6px; gap: 6px; }
+  .ch-quick-icon { width: 36px; height: 36px; }
+  .ch-quick-label { font-size: 10px; }
+
+  /* Layout rows → single column */
+  .ch-row-2 { grid-template-columns: 1fr; gap: 14px; margin-bottom: 14px; }
+  .ch-row-3 { grid-template-columns: 1fr; gap: 14px; margin-bottom: 14px; }
+
+  /* Section cards */
+  .ch-section { padding: 14px; margin-bottom: 14px; }
+
+  /* Donut chart — stack vertically on small card */
+  .ch-donut-wrap { flex-direction: column; align-items: center; gap: 12px; }
+  .ch-donut-svg { flex-shrink: 0; }
+
+  /* CTA Banner */
+  .ch-cta-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+    gap: 14px;
+    text-align: left;
+  }
+  .ch-cta-building { display: none; }
+  .ch-cta-btn { align-self: flex-start; }
+  .ch-cta-title { font-size: 15px; }
+  .ch-cta-phone { width: 40px; height: 60px; font-size: 18px; }
+
+  /* Gate guard table → scroll */
+  .ch-gate-tr {
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    font-size: 11px;
+  }
+
+  /* Tables → horizontal scroll */
+  .ch-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ch-table { min-width: 480px; }
+
+  /* Modals */
+  .ch-modal-overlay { padding: 8px; align-items: flex-end; }
+  .ch-modal {
+    border-radius: 20px 20px 0 0;
+    max-height: 92vh;
+    width: 100%;
+    max-width: 100% !important;
+  }
+  .ch-modal-header { padding: 16px 16px 12px; border-radius: 20px 20px 0 0; }
+  .ch-modal-body { padding: 14px 16px 20px; }
+
+  /* Proposals */
+  .proposals-stats   { grid-template-columns: 1fr 1fr; }
+  .proposals-grid    { grid-template-columns: 1fr; }
+  .proposals-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .proposals-toolbar-right { margin-left: 0; }
+  .proposals-tabs    { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .proposals-tab     { white-space: nowrap; }
+
+  /* Listings */
+  .listings-stats  { grid-template-columns: 1fr 1fr; }
+  .listings-grid   { grid-template-columns: 1fr; }
+  .listings-filters { flex-direction: column; }
+  .listings-form   { grid-template-columns: 1fr; }
+  .listings-form-section { grid-template-columns: 1fr; }
+
+  /* Audit */
+  .audit-filters { flex-direction: column; }
+  .audit-log-item { padding: 10px 12px; gap: 10px; }
+}
+
+/* ── Small Mobile (≤600px) ──────────────────────────────────── */
+@media (max-width: 600px) {
+  /* Stat cards → 2 narrow columns */
+  .ch-stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ch-stat-card { padding: 12px; gap: 8px; }
+  .ch-stat-icon { width: 36px; height: 36px; border-radius: 10px; }
+
+  /* Quick actions → 3 cols still ok */
+  .ch-quick-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+
+  /* Page content */
+  .ch-page-content { padding: 12px 10px; }
+  .ch-navbar { padding: 10px 12px; }
+}
+
+/* ── Very small (≤480px) ────────────────────────────────────── */
+@media (max-width: 480px) {
+  html { font-size: 13px; }
+
+  /* All stat grids → 2 col */
+  .ch-stat-grid { grid-template-columns: 1fr 1fr; }
+  .ch-stat-grid--3 { grid-template-columns: 1fr 1fr; }
+  .ch-stat-value--sm { font-size: 15px; }
+  .ch-stat-label { font-size: 10px; }
+
+  /* Quick actions → 3 col */
+  .ch-quick-grid { grid-template-columns: repeat(3, 1fr); }
+
+  /* Modals: full-screen sheet */
+  .ch-modal { border-radius: 16px 16px 0 0; }
+  .ch-modal-overlay { padding: 0; align-items: flex-end; }
+
+  /* CTA */
+  .ch-cta-banner { padding: 16px; }
+  .ch-cta-title { font-size: 13px; }
+  .ch-cta-sub { font-size: 11px; }
+
+  /* Dropdown width */
+  .ch-dropdown--notif { width: calc(100vw - 24px); right: -50px; }
+
+  /* Proposals stats → 2 col */
+  .proposals-stats { grid-template-columns: 1fr 1fr; }
+
+  /* Gate table → card-like stack */
+  .ch-gate-tr { grid-template-columns: 1fr 1fr; font-size: 11px; gap: 4px; }
+  .ch-gate-thead { display: none; }
+}
+
+/* ── Tiny screens (≤375px) ──────────────────────────────────── */
+@media (max-width: 375px) {
+  .ch-stat-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ch-quick-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .ch-quick-label { font-size: 9px; }
+  .ch-page-content { padding: 10px 8px; }
+  .ch-navbar { padding: 8px 10px; }
+  .ch-navbar-title { font-size: 13px; }
+  .ch-section { padding: 12px 10px; }
+
+  /* SOS button — text only on smallest */
+  .ch-sos-btn span { display: none; }
+  .ch-sos-btn { padding: 7px 8px; }
+}
+
+/* ── Large desktop (≥1440px) ────────────────────────────────── */
+@media (min-width: 1440px) {
+  :root { --ch-sidebar-w: 250px; }
+  .ch-page-content { padding: 32px 40px; }
+  .ch-stat-grid { gap: 20px; }
+}
