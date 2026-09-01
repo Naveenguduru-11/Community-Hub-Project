@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Home, Shield,
   QrCode, AlertCircle, Bell, CreditCard, Calendar,
   Car, Settings, Building2, BarChart3, FileText,
-  UserPlus, Headphones, Globe, Truck, BellRing, ChevronDown, Vote, Tag, X, Menu
+  UserPlus, Headphones, Globe, Truck, BellRing, ChevronDown, Vote, Tag, X
 } from 'lucide-react';
 
 // Role-specific navigation configs
@@ -78,7 +78,7 @@ const ROLE_COLOR = {
 };
 
 // Expose a way for the Navbar to trigger sidebar open
-export let openSidebar = () => {};
+export const openSidebar = () => window.dispatchEvent(new Event('ch:open-sidebar'));
 
 export const Sidebar = () => {
   const { user, logout } = useAuth();
@@ -86,10 +86,11 @@ export const Sidebar = () => {
   const navItems = NAV_CONFIG[role] || NAV_CONFIG.RESIDENT;
   const [isOpen, setIsOpen] = useState(false);
 
-  // Register the open function so Navbar can call it
+  // Listen for the custom open event dispatched by the Navbar hamburger
   useEffect(() => {
-    openSidebar = () => setIsOpen(true);
-    return () => { openSidebar = () => {}; };
+    const handler = () => setIsOpen(true);
+    window.addEventListener('ch:open-sidebar', handler);
+    return () => window.removeEventListener('ch:open-sidebar', handler);
   }, []);
 
   // Close sidebar on route change (any nav click)
