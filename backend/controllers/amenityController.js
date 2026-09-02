@@ -12,8 +12,14 @@ exports.getAmenities = async (req, res, next) => {
   try {
     const isConnected = mongoose.connection.readyState === 1;
     if (isConnected) {
-      const filter = {};
-      if (req.user?.community) filter.community = req.user.community;
+      // Return amenities for this community OR global amenities (no community set)
+      const filter = req.user?.community
+        ? { $or: [
+            { community: req.user.community },
+            { community: null },
+            { community: { $exists: false } }
+          ]}
+        : {};
       const amenities = await Amenity.find(filter).sort({ name: 1 });
       return res.json({ success: true, count: amenities.length, amenities });
     }
