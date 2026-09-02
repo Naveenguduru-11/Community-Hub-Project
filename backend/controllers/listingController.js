@@ -171,3 +171,32 @@ exports.expressInterest = async (req, res, next) => {
     }
   } catch (err) { next(err); }
 };
+
+// ── POST /api/listings/:id/images — upload photos ───────────────────────────
+exports.uploadListingImages = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { uploadImages } = require('../services/imageService');
+    const isConnected = mongoose.connection.readyState === 1;
+
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      imageUrls = await uploadImages(
+        req.files.map(f => ({ buffer: f.buffer, mimetype: f.mimetype })),
+        'communityhub/listings'
+      );
+    } else if (req.body.images) {
+      imageUrls = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
+    }
+
+    if (isConnected && mongoose.Types.ObjectId.isValid(id)) {
+      const listing = await Listing.findByIdAndUpdate(
+        id, { $push: { images: { $each: imageUrls } } }, { new: true }
+      );
+      return res.json({ success: true, images: listing.images });
+    }
+    const item = memListings.find(l => l._id === id);
+    if (item) item.images = [...(item.images || []), ...imageUrls];
+    return res.json({ success: true, images: item?.images || imageUrls });
+  } catch (err) { next(err); }
+};

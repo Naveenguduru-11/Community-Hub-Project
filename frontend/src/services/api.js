@@ -95,12 +95,17 @@ export const analyticsService = {
 };
 
 export const proposalService = {
-  getProposals: (params) => api.get('/proposals', { params }),
-  getProposalById: (id) => api.get(`/proposals/${id}`),
-  createProposal: (data) => api.post('/proposals', data),
-  castVote: (id, optionIndex) => api.post(`/proposals/${id}/vote`, { optionIndex }),
-  updateStatus: (id, status) => api.put(`/proposals/${id}/status`, { status }),
-  deleteProposal: (id) => api.delete(`/proposals/${id}`)
+  getProposals: (params)        => api.get('/proposals', { params }),
+  getProposalById: (id)         => api.get(`/proposals/${id}`),
+  createProposal: (data)        => api.post('/proposals', data),
+  castVote: (id, optionIndex)   => api.post(`/proposals/${id}/vote`, { optionIndex }),
+  updateStatus: (id, status)    => api.put(`/proposals/${id}/status`, { status }),
+  deleteProposal: (id)          => api.delete(`/proposals/${id}`),
+  uploadAttachments: (id, files) => {
+    const fd = new FormData();
+    files.forEach(f => fd.append('attachments', f));
+    return api.post(`/proposals/${id}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 export const auditService = {
@@ -113,6 +118,75 @@ export const listingService = {
   createListing: (data)       => api.post('/listings', data),
   updateListing: (id, data)   => api.put(`/listings/${id}`, data),
   deleteListing: (id)         => api.delete(`/listings/${id}`),
-  expressInterest: (id)       => api.post(`/listings/${id}/interest`)
+  expressInterest: (id)       => api.post(`/listings/${id}/interest`),
+  uploadImages: (id, files)   => {
+    const fd = new FormData();
+    files.forEach(f => fd.append('images', f));
+    return api.post(`/listings/${id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+};
+
+export const marketplaceService = {
+  getItems: (params)        => api.get('/marketplace', { params }),
+  getItem: (id)             => api.get(`/marketplace/${id}`),
+  createItem: (data, files) => {
+    if (files && files.length > 0) {
+      const fd = new FormData();
+      Object.entries(data).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+      });
+      files.forEach(f => fd.append('images', f));
+      return api.post('/marketplace', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+    return api.post('/marketplace', data);
+  },
+  updateItem: (id, data, files) => {
+    if (files && files.length > 0) {
+      const fd = new FormData();
+      Object.entries(data).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+      });
+      files.forEach(f => fd.append('images', f));
+      return api.put(`/marketplace/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+    return api.put(`/marketplace/${id}`, data);
+  },
+  deleteItem: (id)          => api.delete(`/marketplace/${id}`),
+  uploadImages: (id, files) => {
+    const fd = new FormData();
+    files.forEach(f => fd.append('images', f));
+    return api.post(`/marketplace/${id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+};
+
+export const amenityService = {
+  getAmenities: ()                    => api.get('/amenities'),
+  getAmenity: (id)                    => api.get(`/amenities/${id}`),
+  createAmenity: (data, files)        => {
+    const fd = new FormData();
+    Object.entries(data).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+    });
+    if (files && files.length > 0) files.forEach(f => fd.append('images', f));
+    return api.post('/amenities', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  updateAmenity: (id, data, file)     => {
+    const fd = new FormData();
+    Object.entries(data).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+    });
+    if (file) fd.append('image', file);
+    return api.put(`/amenities/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  deleteAmenity: (id)                 => api.delete(`/amenities/${id}`),
+  uploadImages: (id, files)           => {
+    const fd = new FormData();
+    files.forEach(f => fd.append('images', f));
+    return api.post(`/amenities/${id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  getBookings: (id, params)           => api.get(`/amenities/${id}/bookings`, { params }),
+  getMyBookings: ()                   => api.get('/amenities/my-bookings'),
+  createBooking: (id, data)           => api.post(`/amenities/${id}/bookings`, data),
+  updateBookingStatus: (bookingId, status) => api.put(`/amenities/bookings/${bookingId}/status`, { status }),
 };
 

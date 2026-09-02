@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { amenityService } from '../services/api';
 import {
   Building2, Dumbbell, Waves, Zap, Trophy,
   PartyPopper, BedDouble, Gamepad2, ChevronLeft,
   Clock, Users, Calendar, CheckCircle, XCircle,
   AlertTriangle, Loader2, Info, Star, ChevronRight,
-  Plus, Trash2, Ban, BarChart3, CreditCard
+  Plus, Trash2, Ban, BarChart3, CreditCard, Camera, ImagePlus
 } from 'lucide-react';
 
 /* ── Amenity seed data ─────────────────────────────────────── */
@@ -157,12 +158,29 @@ export const AmenitiesPage = () => {
   const isAdmin = ['SUPER_ADMIN','COMMUNITY_ADMIN'].includes(user?.role);
   const isGuard = user?.role === 'SECURITY_GUARD';
 
-  const [amenities]         = useState(AMENITIES_SEED);
+  const [amenities, setAmenities] = useState(AMENITIES_SEED);
+  const [loadingAmenities, setLoadingAmenities] = useState(true);
   const [view, setView]     = useState('list'); // list | detail | book | confirm | mybook | admin
   const [selected, setSelected] = useState(null);
   const [bookings, setBookings] = useState(getBookings);
   const [catFilter, setCatFilter] = useState('All');
   const [tab, setTab]       = useState('upcoming'); // upcoming|completed|cancelled
+
+  // Fetch amenities from API (fall back to seed if empty)
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await amenityService.getAmenities();
+        const data = res.data.amenities || [];
+        if (data.length > 0) setAmenities(data);
+      } catch {
+        // Keep AMENITIES_SEED as fallback
+      } finally {
+        setLoadingAmenities(false);
+      }
+    };
+    load();
+  }, []);
 
   const cats = ['All', ...new Set(AMENITIES_SEED.map(a=>a.category))];
   const filtered = catFilter==='All' ? amenities : amenities.filter(a=>a.category===catFilter);
@@ -714,10 +732,51 @@ function AdminView({ amenities, bookings, onBack }) {
   const popular = amenities.map(a=>({ ...a, count:bookings.filter(b=>b.amenityId===a.id).length }))
     .sort((a,b)=>b.count-a.count)[0];
 
+  const [uploadingId, setUploadingId] = useState(null);
+  const [uploadToast, setUploadToast] = useState('');
+  const [amenityImages, setAmenityImages] = useState({});
+  const photoRef = useRef();
+  const [targetAmenityId, setTargetAmenityId] = useState(null);
+
+  const showUploadToast = (msg) => { setUploadToast(msg); setTimeout(() => setUploadToast(''), 3000); };
+
+  const triggerUpload = (amenityId) => {
+    setTargetAmenityId(amenityId);
+    photoRef.current.click();
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const files = [...e.target.files];
+    if (!files.length || !targetAmenityId) return;
+    setUploadingId(targetAmenityId);
+    try {
+      const res = await amenityService.uploadImages(targetAmenityId, files);
+      setAmenityImages(prev => ({ ...prev, [targetAmenityId]: res.data.images?.[0] }));
+      showUploadToast('✅ Photos uploaded successfully!');
+    } catch {
+      showUploadToast('❌ Upload failed — amenity must be in the database first.');
+    } finally {
+      setUploadingId(null);
+      e.target.value = '';
+    }
+  };
+
   return (
     <div style={{ maxWidth:900, margin:'0 auto' }}>
       <button style={{ ...btnSecondary, marginBottom:16 }} onClick={onBack}><ChevronLeft size={16}/> Back</button>
       <h2 style={{ fontSize:18, fontWeight:900, color:'var(--ch-text-primary)', marginBottom:20 }}>🏢 Amenity Admin Panel</h2>
+
+      {/* Hidden file input */}
+      <input ref={photoRef} type="file" multiple accept="image/*" style={{ display:'none' }} onChange={handlePhotoUpload} />
+
+      {/* Upload toast */}
+      {uploadToast && (
+        <div style={{
+          position:'fixed', bottom:24, right:24, zIndex:9999,
+          padding:'12px 20px', borderRadius:12, background:'#1a1a2e', color:'#fff',
+          fontSize:13, fontWeight:600, boxShadow:'0 8px 28px rgba(0,0,0,0.25)',
+        }}>{uploadToast}</div>
+      )}
 
       {/* Stats */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:14, marginBottom:24 }}>
@@ -736,16 +795,17 @@ function AdminView({ amenities, bookings, onBack }) {
         ))}
       </div>
 
-      {/* Amenity list */}
+      {/* Amenity list with photo upload */}
       <div style={{ background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:16, marginBottom:20 }}>
-        <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--ch-card-border)', fontSize:14, fontWeight:800, color:'var(--ch-text-primary)' }}>
+        <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--ch-card-border)', fontSize:14, fontWeight:800, color:'var(--ch-text-primary)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           Amenities Overview
+          <span style={{ fontSize:11, color:'var(--ch-text-muted)', fontWeight:400 }}>Click 📷 to upload cover photos</span>
         </div>
         <div style={{ overflowX:'auto' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead>
               <tr style={{ background:'var(--ch-body-bg)' }}>
-                {['Amenity','Category','Capacity','Slots','Bookings','Status'].map(h=>(
+                {['Photo','Amenity','Category','Capacity','Slots','Bookings','Status','Actions'].map(h=>(
                   <th key={h} style={{ padding:'10px 16px', textAlign:'left', fontWeight:700, color:'var(--ch-text-muted)', whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -754,8 +814,16 @@ function AdminView({ amenities, bookings, onBack }) {
               {amenities.map(a => {
                 const bcount = bookings.filter(b=>b.amenityId===a.id).length;
                 const inM = isInMaintenance(a, today);
+                const coverImg = amenityImages[a._id || a.id] || a.image;
                 return (
-                  <tr key={a.id} style={{ borderTop:'1px solid var(--ch-card-border)' }}>
+                  <tr key={a.id || a._id} style={{ borderTop:'1px solid var(--ch-card-border)' }}>
+                    <td style={{ padding:'10px 16px' }}>
+                      <div style={{ width:44, height:44, borderRadius:10, overflow:'hidden', background:'#f1f5f9', flexShrink:0 }}>
+                        {coverImg
+                          ? <img src={coverImg} alt={a.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>{a.emoji}</div>}
+                      </div>
+                    </td>
                     <td style={{ padding:'12px 16px', fontWeight:700, color:'var(--ch-text-primary)' }}>{a.emoji} {a.name}</td>
                     <td style={{ padding:'12px 16px', color:'var(--ch-text-muted)' }}>{a.category}</td>
                     <td style={{ padding:'12px 16px', color:'var(--ch-text-muted)' }}>{a.capacity}</td>
@@ -766,6 +834,22 @@ function AdminView({ amenities, bookings, onBack }) {
                         background: inM ? '#fef3c7' : '#d1fae5', color: inM ? '#92400e' : '#065f46' }}>
                         {inM ? '🔴 Maintenance' : '🟢 Active'}
                       </span>
+                    </td>
+                    <td style={{ padding:'10px 16px' }}>
+                      <button
+                        onClick={() => triggerUpload(a._id || a.id)}
+                        disabled={uploadingId === (a._id || a.id)}
+                        style={{
+                          display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px',
+                          borderRadius:8, background:'#eff6ff', color:'#3b82f6', border:'1px solid #bfdbfe',
+                          cursor:'pointer', fontSize:11, fontWeight:700,
+                          opacity: uploadingId === (a._id || a.id) ? 0.6 : 1,
+                        }}
+                      >
+                        {uploadingId === (a._id || a.id)
+                          ? <><Loader2 size={11} style={{ animation:'spin 1s linear infinite' }}/> Uploading…</>
+                          : <><Camera size={11}/> Upload Photo</>}
+                      </button>
                     </td>
                   </tr>
                 );

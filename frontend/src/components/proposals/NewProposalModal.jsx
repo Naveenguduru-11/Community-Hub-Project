@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, FileText, Tag, Calendar, BarChart2, Users, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, FileText, Tag, Calendar, BarChart2, Users, AlertCircle, ImagePlus } from 'lucide-react';
 
 const CATEGORIES = ['Infrastructure', 'Rules', 'Events', 'Finance', 'Other'];
 
@@ -14,7 +14,21 @@ export const NewProposalModal = ({ onClose, onSubmit, loading }) => {
     customOptions: '',
     status: 'draft'
   });
+  const [attachments, setAttachments] = useState([]); // [{file, preview, name}]
   const [errors, setErrors] = useState({});
+  const fileRef = useRef();
+
+  const addFiles = (files) => {
+    const remaining = 5 - attachments.length;
+    const valid = [...files].slice(0, remaining).filter(f => f.type.startsWith('image/'));
+    valid.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAttachments(prev => [...prev, { file, preview: e.target.result, name: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -36,7 +50,7 @@ export const NewProposalModal = ({ onClose, onSubmit, loading }) => {
     const options = form.customOptions
       ? form.customOptions.split(',').map(s => s.trim()).filter(Boolean)
       : [];
-    onSubmit({ ...form, options });
+    onSubmit({ ...form, options }, attachments.map(a => a.file));
   };
 
   // Min datetime for the deadline picker = now + 1 hour
@@ -131,6 +145,48 @@ export const NewProposalModal = ({ onClose, onSubmit, loading }) => {
                 onChange={e => set('passThresholdPercent', Number(e.target.value))}
               />
             </div>
+          </div>
+
+          {/* Photo Attachments */}
+          <div className="ch-form-group">
+            <label className="ch-form-label">📷 Supporting Photos <span style={{ color: 'var(--ch-text-muted)', fontWeight: 400 }}>(optional, up to 5)</span></label>
+            <div
+              onClick={() => attachments.length < 5 && fileRef.current.click()}
+              style={{
+                border: '2px dashed var(--ch-card-border)',
+                borderRadius: 10, padding: '14px 12px',
+                textAlign: 'center', cursor: attachments.length < 5 ? 'pointer' : 'default',
+                background: 'var(--ch-body-bg)',
+              }}
+            >
+              <ImagePlus size={22} style={{ opacity: 0.35, margin: '0 auto 6px', display: 'block' }} />
+              <p style={{ fontSize: 12, color: 'var(--ch-text-muted)', margin: 0 }}>
+                {attachments.length >= 5
+                  ? 'Max 5 photos reached'
+                  : <><span style={{ color: '#6366f1', fontWeight: 700 }}>Click to upload</span> photos ({attachments.length}/5)</>}
+              </p>
+              <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
+                onChange={e => addFiles(e.target.files)} />
+            </div>
+            {attachments.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                {attachments.map((a, i) => (
+                  <div key={i} style={{ position: 'relative' }}>
+                    <img src={a.preview} alt={a.name}
+                      style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, border: '2px solid var(--ch-card-border)' }} />
+                    <button type="button"
+                      onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                      style={{
+                        position: 'absolute', top: -6, right: -6, width: 18, height: 18,
+                        borderRadius: '50%', background: '#ef4444', border: '2px solid #fff',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                      }}>
+                      <X size={9} color="#fff" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Custom options */}

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listingService } from '../services/api';
 import {
   Home, Plus, Edit2, Trash2, X, Search, Eye, Heart,
   Phone, Mail, MapPin, IndianRupee, Maximize2, BedDouble,
   CheckCircle2, Clock, Tag, Star, TrendingUp, Building2,
-  Filter, RefreshCw, Share2, ChevronRight, Zap, Shield
+  Filter, RefreshCw, Share2, ChevronRight, Zap, Shield, Camera, ImagePlus
 } from 'lucide-react';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -57,11 +57,30 @@ function PropertyCard({ listing, isAdmin, onEdit, onDelete, onInterest, interest
 
   return (
     <div className="listing-card">
-      {/* Color band */}
-      <div className="listing-card__band" style={{ background: `linear-gradient(135deg, ${tp.color}33, ${tp.color}11)` }}>
-        <div className="listing-card__band-inner">
-          <Building2 size={40} color={tp.color} style={{ opacity: 0.4 }} />
-        </div>
+      {/* Cover image or color band */}
+      <div className="listing-card__band" style={{
+        background: listing.images?.[0]
+          ? 'transparent'
+          : `linear-gradient(135deg, ${tp.color}33, ${tp.color}11)`,
+        position: 'relative', overflow: 'hidden'
+      }}>
+        {listing.images?.[0] ? (
+          <img
+            src={listing.images[0]}
+            alt={listing.title}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div className="listing-card__band-inner">
+            <Building2 size={40} color={tp.color} style={{ opacity: 0.4 }} />
+          </div>
+        )}
+        {listing.images?.length > 1 && (
+          <span style={{
+            position: 'absolute', bottom: 8, right: 8, fontSize: 10, fontWeight: 700,
+            background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 6, padding: '2px 7px',
+          }}>📷 {listing.images.length}</span>
+        )}
         {/* Badges */}
         <div className="listing-card__badges">
           <span className="listing-badge" style={{ background: tp.color + '22', color: tp.color, border: `1px solid ${tp.color}44` }}>
@@ -73,6 +92,7 @@ function PropertyCard({ listing, isAdmin, onEdit, onDelete, onInterest, interest
         </div>
         <div className="listing-card__status-dot">
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.dot, display: 'inline-block' }} />
+
           <span style={{ fontSize: 11, fontWeight: 700, color: st.text }}>{st.label}</span>
         </div>
       </div>
@@ -217,6 +237,8 @@ export const ListingsPage = () => {
   const [interested, setInterested]       = useState(new Set());
   const [toast, setToast]                 = useState(null);
   const [selectedAmenities, setSelectedAmenities] = useState([]);
+  const [imageFiles, setImageFiles]       = useState([]); // [{file, preview}]
+  const imgFileRef = useRef();
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -261,6 +283,7 @@ export const ListingsPage = () => {
     setEditingListing(null);
     setForm({ ...BLANK_FORM, contactName: user?.name || '', contactEmail: user?.email || '' });
     setSelectedAmenities([]);
+    setImageFiles([]);
     setShowForm(true);
   };
 
@@ -279,6 +302,7 @@ export const ListingsPage = () => {
       contactEmail: listing.contactEmail || '', visibleToResidents: listing.visibleToResidents !== false
     });
     setSelectedAmenities(listing.amenities || []);
+    setImageFiles([]);
     setShowForm(true);
   };
 
@@ -290,12 +314,23 @@ export const ListingsPage = () => {
         amenities: selectedAmenities,
         highlights: form.highlights ? form.highlights.split(',').map(h => h.trim()).filter(Boolean) : []
       };
+      let savedId;
       if (editingListing) {
         await listingService.updateListing(editingListing._id, payload);
+        savedId = editingListing._id;
         showToast('Listing updated successfully!');
       } else {
-        await listingService.createListing(payload);
+        const res = await listingService.createListing(payload);
+        savedId = res.data.listing?._id;
         showToast('Listing posted successfully!');
+      }
+      // Upload images if any
+      if (imageFiles.length > 0 && savedId) {
+        try {
+          await listingService.uploadImages(savedId, imageFiles.map(i => i.file));
+        } catch (err) {
+          console.warn('Image upload failed:', err);
+        }
       }
       setShowForm(false);
       fetchListings();
@@ -488,6 +523,62 @@ export const ListingsPage = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="ch-modal-body listings-form">
+              {/* Section: Photos */}
+              <div className="listings-form-section">
+                <div className="listings-form-section-label">📷 Property Photos</div>
+                <div className="ch-form-group" style={{ gridColumn: '1/-1' }}>
+                  <label className="ch-form-label">Upload Photos (up to 10) — first photo is the cover</label>
+                  <div
+                    onClick={() => imageFiles.length < 10 && imgFileRef.current.click()}
+                    style={{
+                      border: '2px dashed var(--ch-card-border)', borderRadius: 12,
+                      padding: '16px', textAlign: 'center',
+                      cursor: imageFiles.length < 10 ? 'pointer' : 'default',
+                      background: 'var(--ch-body-bg)', transition: 'all 0.2s',
+                    }}
+                  >
+                    <Camera size={24} style={{ opacity: 0.35, margin: '0 auto 6px', display: 'block' }} />
+                    <p style={{ fontSize: 12, color: 'var(--ch-text-muted)', margin: 0 }}>
+                      {imageFiles.length >= 10
+                        ? 'Max 10 photos reached'
+                        : <><span style={{ color: '#6366f1', fontWeight: 700 }}>Click to upload</span> property photos ({imageFiles.length}/10)</>}
+                    </p>
+                    <input
+                      ref={imgFileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
+                      onChange={e => {
+                        const remaining = 10 - imageFiles.length;
+                        const files = [...e.target.files].slice(0, remaining).filter(f => f.type.startsWith('image/'));
+                        files.forEach(file => {
+                          const reader = new FileReader();
+                          reader.onload = ev => setImageFiles(prev => [...prev, { file, preview: ev.target.result }]);
+                          reader.readAsDataURL(file);
+                        });
+                      }}
+                    />
+                  </div>
+                  {imageFiles.length > 0 && (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                      {imageFiles.map((img, i) => (
+                        <div key={i} style={{ position: 'relative', width: 72, height: 72 }}>
+                          <img src={img.preview} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: `2px solid ${i===0 ? '#6366f1' : 'var(--ch-card-border)'}` }} />
+                          {i === 0 && <span style={{ position:'absolute', bottom:2, left:2, fontSize:9, fontWeight:800, background:'#6366f1', color:'#fff', borderRadius:4, padding:'1px 4px' }}>Cover</span>}
+                          <button type="button"
+                            onClick={() => setImageFiles(prev => prev.filter((_, idx) => idx !== i))}
+                            style={{ position:'absolute', top:-6, right:-6, width:20, height:20, borderRadius:'50%', background:'#ef4444', border:'2px solid #fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
+                            <X size={10} color="#fff" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {editingListing?.images?.length > 0 && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ch-text-muted)' }}>
+                      ℹ️ Existing photos: {editingListing.images.length} — new uploads will be added
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Section: Basic */}
               <div className="listings-form-section">
                 <div className="listings-form-section-label">📋 Basic Information</div>
@@ -503,6 +594,7 @@ export const ListingsPage = () => {
                     value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
                 </div>
               </div>
+
 
               {/* Section: Property Details */}
               <div className="listings-form-section">

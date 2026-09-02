@@ -340,3 +340,46 @@ exports.getAuditLogs = async (req, res, next) => {
 
 // Export memory store for analytics clear
 exports.getMemoryAuditLogs = () => memoryAuditLogs;
+
+// ── POST /api/proposals/:id/attachments — upload photos/docs ─────────────────
+exports.uploadAttachments = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { uploadImages } = require('../services/imageService');
+    const isConnected = mongoose.connection.readyState === 1;
+
+    let attachments = [];
+    if (req.files && req.files.length > 0) {
+      const urls = await uploadImages(
+        req.files.map(f => ({ buffer: f.buffer, mimetype: f.mimetype })),
+        'communityhub/proposals'
+      );
+      attachments = req.files.map((f, i) => ({
+        url: urls[i],
+        name: f.originalname,
+        type: f.mimetype.startsWith('image/') ? 'image' : 'document'
+      }));
+    } else if (req.body.attachments) {
+      attachments = Array.isArray(req.body.attachments)
+        ? req.body.attachments
+        : [req.body.attachments];
+    }
+
+    if (isConnected && mongoose.Types.ObjectId.isValid(id)) {
+      const proposal = await Proposal.findByIdAndUpdate(
+        id,
+        { $push: { attachments: { $each: attachments } } },
+        { new: true }
+      );
+      return res.json({ success: true, attachments: proposal.attachments });
+    }
+
+    // In-memory fallback
+    const p = memoryProposals.find(p => p._id === id || p._id?.toString() === id);
+    if (p) {
+      p.attachments = [...(p.attachments || []), ...attachments];
+      return res.json({ success: true, attachments: p.attachments });
+    }
+    return res.json({ success: true, attachments });
+  } catch (err) { next(err); }
+};

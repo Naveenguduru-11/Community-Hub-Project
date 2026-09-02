@@ -23,6 +23,8 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const proposalRoutes = require('./routes/proposalRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const listingRoutes = require('./routes/listingRoutes');
+const marketplaceRoutes = require('./routes/marketplaceRoutes');
+const amenityRoutes = require('./routes/amenityRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -64,6 +66,8 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/listings', listingRoutes);
+app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/amenities', amenityRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);

@@ -136,10 +136,18 @@ export const ProposalsPage = () => {
 
   useEffect(() => { fetchProposals(); }, [fetchProposals]);
 
-  const handleCreate = async (formData) => {
+  const handleCreate = async (formData, attachmentFiles) => {
     setActionLoading(true);
     try {
-      await proposalService.createProposal(formData);
+      const res = await proposalService.createProposal(formData);
+      // Upload attachments if provided
+      if (attachmentFiles && attachmentFiles.length > 0) {
+        try {
+          await proposalService.uploadAttachments(res.data.proposal._id, attachmentFiles);
+        } catch (uploadErr) {
+          console.warn('Attachment upload failed:', uploadErr);
+        }
+      }
       setShowCreate(false);
       showToast('Proposal created successfully!');
       fetchProposals();

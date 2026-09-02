@@ -1,34 +1,36 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { marketplaceService } from '../services/api';
 import {
   Search, Plus, X, Heart, Flag, MessageCircle, Tag,
   Filter, SortAsc, Package, ChevronDown, ChevronLeft,
   Edit3, Trash2, CheckCircle, Clock, AlertCircle,
-  Camera, Star, TrendingUp, ShoppingBag, Loader2, Eye
+  Camera, Star, TrendingUp, ShoppingBag, Loader2, Eye,
+  Upload, ImagePlus, XCircle
 } from 'lucide-react';
 
 /* ── Constants ──────────────────────────────────────────────── */
 const CATEGORIES = [
-  { id:'all',       label:'All',            emoji:'🏠' },
-  { id:'furniture', label:'Furniture',       emoji:'🛋️' },
+  { id:'all',        label:'All',           emoji:'🏠' },
+  { id:'furniture',  label:'Furniture',     emoji:'🛋️' },
   { id:'electronics',label:'Electronics',   emoji:'📱' },
-  { id:'appliances',label:'Appliances',     emoji:'🏠' },
-  { id:'kitchen',   label:'Kitchen',        emoji:'🍳' },
-  { id:'computers', label:'Computers',      emoji:'💻' },
-  { id:'vehicles',  label:'Vehicles',       emoji:'🚗' },
-  { id:'books',     label:'Books',          emoji:'📚' },
-  { id:'sports',    label:'Sports',         emoji:'⚽' },
-  { id:'kids',      label:'Kids & Baby',    emoji:'🧸' },
-  { id:'decor',     label:'Home Decor',     emoji:'🖼️' },
-  { id:'clothing',  label:'Clothing',       emoji:'👕' },
-  { id:'services',  label:'Services',       emoji:'🔧' },
-  { id:'other',     label:'Other',          emoji:'📦' },
+  { id:'appliances', label:'Appliances',    emoji:'🏠' },
+  { id:'kitchen',    label:'Kitchen',       emoji:'🍳' },
+  { id:'computers',  label:'Computers',     emoji:'💻' },
+  { id:'vehicles',   label:'Vehicles',      emoji:'🚗' },
+  { id:'books',      label:'Books',         emoji:'📚' },
+  { id:'sports',     label:'Sports',        emoji:'⚽' },
+  { id:'kids',       label:'Kids & Baby',   emoji:'🧸' },
+  { id:'decor',      label:'Home Decor',    emoji:'🖼️' },
+  { id:'clothing',   label:'Clothing',      emoji:'👕' },
+  { id:'services',   label:'Services',      emoji:'🔧' },
+  { id:'other',      label:'Other',         emoji:'📦' },
 ];
 
 const CONDITIONS = ['All', 'New', 'Like New', 'Good', 'Used'];
 const SORT_OPTIONS = [
-  { value:'newest',   label:'Newest First' },
-  { value:'price_asc',label:'Price: Low → High' },
+  { value:'newest',    label:'Newest First' },
+  { value:'price_asc', label:'Price: Low → High' },
   { value:'price_desc',label:'Price: High → Low' },
 ];
 
@@ -38,22 +40,6 @@ const STATUS_STYLE = {
   Reserved:  { bg:'#fef3c7', color:'#92400e' },
 };
 
-/* ── Seed listings ──────────────────────────────────────────── */
-const SEED = [
-  { id:'1', title:'Teak Wood Dining Table (6 seater)', category:'furniture', price:18000, condition:'Good', status:'Available', desc:'Solid teak wood dining table with 6 chairs. 5 years old, well maintained. Minor scratches on one chair. Self-pickup preferred.', location:'Tower B, Floor 3', sellerName:'Ravi Kumar', sellerId:'seed1', images:['https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400&q=80'], postedAt: new Date(Date.now()-86400000*2).toISOString(), views:42, saved:false },
-  { id:'2', title:'LG 1.5 Ton Split AC (2022 model)', category:'appliances', price:28000, condition:'Like New', status:'Available', desc:'LG 5-star inverter AC, purchased in 2022. Reason for selling: moving out. Service done 3 months ago. Includes remote and wall bracket.', location:'Tower A, Floor 7', sellerName:'Priya Sharma', sellerId:'seed2', images:['https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80'], postedAt: new Date(Date.now()-86400000*1).toISOString(), views:89, saved:false },
-  { id:'3', title:'Sony PlayStation 5 + 3 Games', category:'electronics', price:45000, condition:'Like New', status:'Available', desc:'PS5 Disc Edition bought last year. Includes FIFA 24, GTA V, and Spider-Man 2. Selling due to work schedule. Box and all accessories included.', location:'Tower C, Floor 2', sellerName:'Arjun Nair', sellerId:'seed3', images:['https://images.unsplash.com/photo-1607853202273-797f1c22a38e?w=400&q=80'], postedAt: new Date(Date.now()-3600000*5).toISOString(), views:156, saved:false },
-  { id:'4', title:'MacBook Pro 14" M3 (2024)', category:'computers', price:140000, condition:'New', status:'Reserved', desc:'Brand new MacBook Pro 14" M3 chip, 16GB RAM, 512GB SSD. Still in box, bought as gift. Selling at cost price. Bill and warranty card included.', location:'Tower D, Floor 10', sellerName:'Sneha Reddy', sellerId:'seed4', images:['https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&q=80'], postedAt: new Date(Date.now()-3600000*12).toISOString(), views:211, saved:false },
-  { id:'5', title:'Children\'s Cycle (5-8 years)', category:'kids', price:2500, condition:'Good', status:'Available', desc:'Hero brand kids cycle, suitable for 5-8 year olds. Used for 1.5 years. Tyres recently replaced. Has training wheels. Comes with helmet.', location:'Tower B, Floor 6', sellerName:'Meena Patel', sellerId:'seed5', images:['https://images.unsplash.com/photo-1571333250630-f0230c320b6d?w=400&q=80'], postedAt: new Date(Date.now()-86400000*5).toISOString(), views:28, saved:false },
-  { id:'6', title:'JBL Flip 6 Bluetooth Speaker', category:'electronics', price:4500, condition:'Like New', status:'Sold', desc:'JBL Flip 6 speaker, waterproof. Used only 5-6 times, sound quality excellent. Original box and charging cable included.', location:'Tower A, Floor 4', sellerName:'Kiran Rao', sellerId:'seed6', images:['https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=400&q=80'], postedAt: new Date(Date.now()-86400000*7).toISOString(), views:73, saved:false },
-];
-
-const S = (base) => ({ ...base });
-const cardS = {
-  background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)',
-  borderRadius:16, overflow:'hidden', cursor:'pointer',
-  transition:'transform 0.18s, box-shadow 0.18s',
-};
 const inp = {
   padding:'9px 12px', borderRadius:10, border:'1px solid var(--ch-card-border)',
   background:'var(--ch-body-bg)', color:'var(--ch-text-primary)',
@@ -69,108 +55,232 @@ const btnSecondary = {
   borderRadius:10, background:'var(--ch-body-bg)', color:'var(--ch-text-primary)',
   fontWeight:600, fontSize:13, border:'1px solid var(--ch-card-border)', cursor:'pointer',
 };
+const cardS = {
+  background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)',
+  borderRadius:16, overflow:'hidden', cursor:'pointer',
+  transition:'transform 0.18s, box-shadow 0.18s',
+};
 
 function timeAgo(iso) {
+  if (!iso) return '';
   const d = (Date.now() - new Date(iso)) / 1000;
   if (d < 3600) return `${Math.round(d/60)}m ago`;
   if (d < 86400) return `${Math.round(d/3600)}h ago`;
   return `${Math.round(d/86400)}d ago`;
 }
 
+/* ── Image Uploader Component ─────────────────────────────── */
+function ImageUploader({ images, onChange, max = 5 }) {
+  const fileRef = useRef();
+  const [dragging, setDragging] = useState(false);
+
+  const addFiles = (files) => {
+    const remaining = max - images.length;
+    const valid = [...files].slice(0, remaining).filter(f => f.type.startsWith('image/'));
+    if (!valid.length) return;
+    valid.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        onChange(prev => [...prev, { file, preview: e.target.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragging(false);
+    addFiles(e.dataTransfer.files);
+  };
+
+  const removeImage = (i) => onChange(prev => prev.filter((_, idx) => idx !== i));
+
+  return (
+    <div>
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => images.length < max && fileRef.current.click()}
+        style={{
+          border: `2px dashed ${dragging ? '#6366f1' : 'var(--ch-card-border)'}`,
+          borderRadius: 12, padding: '20px 16px',
+          textAlign: 'center', cursor: images.length < max ? 'pointer' : 'default',
+          background: dragging ? '#f0f0ff' : 'var(--ch-body-bg)',
+          transition: 'all 0.2s',
+        }}
+      >
+        <ImagePlus size={28} style={{ opacity: 0.4, margin: '0 auto 8px', display: 'block' }} />
+        <p style={{ fontSize: 12, color: 'var(--ch-text-muted)', margin: 0 }}>
+          {images.length >= max
+            ? `Max ${max} photos reached`
+            : <>Drop photos here or <span style={{ color: '#6366f1', fontWeight: 700 }}>browse</span> ({images.length}/{max})</>}
+        </p>
+        <input
+          ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
+          onChange={e => addFiles(e.target.files)}
+        />
+      </div>
+      {images.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          {images.map((img, i) => (
+            <div key={i} style={{ position: 'relative', width: 72, height: 72 }}>
+              <img
+                src={img.preview || img}
+                alt=""
+                style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: '2px solid var(--ch-card-border)' }}
+              />
+              {i === 0 && (
+                <span style={{
+                  position: 'absolute', bottom: 2, left: 2, fontSize: 9, fontWeight: 800,
+                  background: '#6366f1', color: '#fff', borderRadius: 4, padding: '1px 4px'
+                }}>Cover</span>
+              )}
+              <button
+                type="button"
+                onClick={() => removeImage(i)}
+                style={{
+                  position: 'absolute', top: -6, right: -6, width: 20, height: 20,
+                  borderRadius: '50%', background: '#ef4444', border: '2px solid #fff',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                }}
+              >
+                <X size={10} color="#fff" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════ */
 export const MarketplacePage = () => {
   const { user } = useAuth();
-  const [listings, setListings]   = useState(() => {
-    try { return JSON.parse(localStorage.getItem('ch_marketplace') || 'null') || SEED; }
-    catch { return SEED; }
-  });
-  const [view, setView]         = useState('browse'); // browse | detail | sell | my
-  const [selected, setSelected] = useState(null);
-  const [cat, setCat]           = useState('all');
-  const [condition, setCondition] = useState('All');
-  const [sort, setSort]         = useState('newest');
-  const [search, setSearch]     = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
+  const [listings, setListings]     = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [view, setView]             = useState('browse'); // browse | detail | sell | my
+  const [selected, setSelected]     = useState(null);
+  const [cat, setCat]               = useState('all');
+  const [condition, setCondition]   = useState('All');
+  const [sort, setSort]             = useState('newest');
+  const [search, setSearch]         = useState('');
+  const [maxPrice, setMaxPrice]     = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [saveToast, setSaveToast] = useState('');
+  const [toast, setToast]           = useState('');
 
-  const save = (data) => {
-    setListings(data);
-    localStorage.setItem('ch_marketplace', JSON.stringify(data));
-  };
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
 
-  /* ── Filtered listings ── */
+  /* ── Fetch from API ── */
+  const fetchListings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await marketplaceService.getItems();
+      setListings(res.data.items || []);
+    } catch (err) {
+      console.error('Marketplace fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchListings(); }, [fetchListings]);
+
+  /* ── Filtered / sorted ── */
   const filtered = listings
     .filter(l => {
       if (cat !== 'all' && l.category !== cat) return false;
       if (condition !== 'All' && l.condition !== condition) return false;
       if (maxPrice && l.price > Number(maxPrice)) return false;
-      if (search && !l.title.toLowerCase().includes(search.toLowerCase()) &&
-          !l.desc.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!l.title?.toLowerCase().includes(q) && !l.description?.toLowerCase().includes(q)) return false;
+      }
       return true;
     })
     .sort((a, b) => {
       if (sort === 'price_asc') return a.price - b.price;
       if (sort === 'price_desc') return b.price - a.price;
-      return new Date(b.postedAt) - new Date(a.postedAt);
+      return new Date(b.createdAt) - new Date(a.createdAt);
     });
 
-  const myListings = listings.filter(l => l.sellerId === user?._id);
-
-  const toggleSave = (id) => {
-    const updated = listings.map(l => l.id === id ? {...l, saved:!l.saved} : l);
-    save(updated);
-    setSaveToast(listings.find(l=>l.id===id)?.saved ? 'Removed from saved' : 'Saved!');
-    setTimeout(() => setSaveToast(''), 2000);
-  };
+  const myListings = listings.filter(l =>
+    l.seller?._id === user?._id || l.seller === user?._id
+  );
 
   /* ── Detail view ── */
   if (view === 'detail' && selected) {
-    return <DetailView
-      item={selected}
-      user={user}
-      onBack={() => { setView('browse'); setSelected(null); }}
-      onSave={() => toggleSave(selected.id)}
-      onStatusChange={(id, status) => {
-        const updated = listings.map(l => l.id === id ? {...l, status} : l);
-        save(updated);
-        setSelected(prev => ({...prev, status}));
-      }}
-      onDelete={(id) => {
-        save(listings.filter(l => l.id !== id));
-        setView('browse'); setSelected(null);
-      }}
-      isSaved={listings.find(l=>l.id===selected.id)?.saved}
-    />;
+    return (
+      <DetailView
+        item={selected}
+        user={user}
+        onBack={() => { setView('browse'); setSelected(null); }}
+        onStatusChange={async (id, status) => {
+          try {
+            await marketplaceService.updateItem(id, { status });
+            fetchListings();
+            setSelected(prev => ({ ...prev, status }));
+            showToast(`Status updated to ${status}`);
+          } catch { showToast('Failed to update status'); }
+        }}
+        onDelete={async (id) => {
+          try {
+            await marketplaceService.deleteItem(id);
+            fetchListings();
+            setView('browse'); setSelected(null);
+            showToast('Listing deleted');
+          } catch { showToast('Failed to delete'); }
+        }}
+      />
+    );
   }
 
-  /* ── Sell / Edit form ── */
+  /* ── Sell form ── */
   if (view === 'sell') {
-    return <SellForm
-      user={user}
-      onBack={() => setView('browse')}
-      onSave={(listing) => {
-        save([listing, ...listings]);
-        setView('my');
-      }}
-    />;
+    return (
+      <SellForm
+        user={user}
+        onBack={() => setView('browse')}
+        onSave={async (data, files) => {
+          try {
+            await marketplaceService.createItem(data, files);
+            await fetchListings();
+            setView('my');
+            showToast('🎉 Listing published!');
+          } catch (err) {
+            showToast('Failed to publish. Try again.');
+          }
+        }}
+      />
+    );
   }
 
   /* ── My Listings ── */
   if (view === 'my') {
-    return <MyListings
-      listings={myListings}
-      user={user}
-      onBack={() => setView('browse')}
-      onNew={() => setView('sell')}
-      onOpen={(item) => { setSelected(item); setView('detail'); }}
-      onStatusChange={(id, status) => {
-        const updated = listings.map(l => l.id === id ? {...l, status} : l);
-        save(updated);
-        setMyListings(prev => prev.map(l => l.id === id ? {...l, status} : l));
-      }}
-      onDelete={(id) => { save(listings.filter(l => l.id !== id)); }}
-    />;
+    return (
+      <MyListings
+        listings={myListings}
+        user={user}
+        loading={loading}
+        onBack={() => setView('browse')}
+        onNew={() => setView('sell')}
+        onOpen={(item) => { setSelected(item); setView('detail'); }}
+        onStatusChange={async (id, status) => {
+          try {
+            await marketplaceService.updateItem(id, { status });
+            fetchListings();
+            showToast('Status updated');
+          } catch { showToast('Failed'); }
+        }}
+        onDelete={async (id) => {
+          try {
+            await marketplaceService.deleteItem(id);
+            fetchListings();
+            showToast('Deleted');
+          } catch { showToast('Failed'); }
+        }}
+      />
+    );
   }
 
   /* ── Browse view ── */
@@ -282,13 +392,18 @@ export const MarketplacePage = () => {
 
       {/* Results count */}
       <div style={{ fontSize:12, color:'var(--ch-text-muted)', marginBottom:14, fontWeight:600 }}>
-        Showing {filtered.length} listing{filtered.length !== 1 ? 's' : ''}
+        {loading ? 'Loading listings…' : `Showing ${filtered.length} listing${filtered.length !== 1 ? 's' : ''}`}
         {search && ` for "${search}"`}
         {cat !== 'all' && ` in ${CATEGORIES.find(c=>c.id===cat)?.label}`}
       </div>
 
-      {/* Listings grid */}
-      {filtered.length === 0 ? (
+      {/* Loading */}
+      {loading ? (
+        <div style={{ textAlign:'center', padding:'60px 20px' }}>
+          <Loader2 size={36} style={{ animation:'spin 1s linear infinite', opacity:0.4, margin:'0 auto 12px', display:'block' }} />
+          <p style={{ color:'var(--ch-text-muted)', fontSize:14 }}>Loading marketplace…</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{
           textAlign:'center', padding:'60px 20px',
           background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:16,
@@ -310,32 +425,29 @@ export const MarketplacePage = () => {
         }}>
           {filtered.map(item => (
             <ListingCard
-              key={item.id}
+              key={item._id}
               item={item}
-              isMine={item.sellerId === user?._id}
-              isSaved={item.saved}
+              isMine={item.seller?._id === user?._id || item.seller === user?._id}
               onOpen={() => { setSelected(item); setView('detail'); }}
-              onSave={() => toggleSave(item.id)}
             />
           ))}
         </div>
       )}
 
-      {/* Save toast */}
-      {saveToast && (
+      {/* Toast */}
+      {toast && (
         <div style={{
           position:'fixed', bottom:24, right:24, zIndex:9000,
           padding:'12px 20px', borderRadius:12, background:'#1a1a2e', color:'#fff',
           fontSize:13, fontWeight:600, boxShadow:'0 8px 28px rgba(0,0,0,0.25)',
-          animation:'slideUp 0.25s ease',
-        }}>{saveToast}</div>
+        }}>{toast}</div>
       )}
     </div>
   );
 };
 
 /* ── Listing Card ─────────────────────────────────────────── */
-function ListingCard({ item, isMine, isSaved, onOpen, onSave }) {
+function ListingCard({ item, isMine, onOpen }) {
   const [hover, setHover] = useState(false);
   const ss = STATUS_STYLE[item.status] || STATUS_STYLE.Available;
   return (
@@ -354,27 +466,22 @@ function ListingCard({ item, isMine, isSaved, onOpen, onSave }) {
             <Package size={40} style={{ opacity:0.2 }} />
           </div>
         )}
-        {/* Status badge */}
+        {/* Photo count badge */}
+        {item.images?.length > 1 && (
+          <span style={{
+            position:'absolute', bottom:8, right:8, fontSize:10, fontWeight:700,
+            background:'rgba(0,0,0,0.6)', color:'#fff', borderRadius:6, padding:'2px 6px',
+          }}>
+            📷 {item.images.length}
+          </span>
+        )}
         <span style={{
           position:'absolute', top:10, left:10, padding:'3px 10px', borderRadius:99,
           fontSize:11, fontWeight:800, ...ss,
         }}>{item.status}</span>
-        {/* Save button */}
-        <button
-          onClick={e => { e.stopPropagation(); onSave(); }}
-          style={{
-            position:'absolute', top:8, right:8, width:32, height:32, borderRadius:99,
-            background:'rgba(255,255,255,0.9)', border:'none', cursor:'pointer',
-            display:'flex', alignItems:'center', justifyContent:'center',
-          }}
-          title={isSaved ? 'Unsave' : 'Save'}
-        >
-          <Heart size={15} fill={isSaved ? '#ef4444' : 'none'} color={isSaved ? '#ef4444' : '#6b7280'} />
-        </button>
-        {/* Mine badge */}
         {isMine && (
           <span style={{
-            position:'absolute', bottom:10, right:10, padding:'2px 8px', borderRadius:99,
+            position:'absolute', bottom:8, left:10, padding:'2px 8px', borderRadius:99,
             fontSize:10, fontWeight:800, background:'#6366f1', color:'#fff',
           }}>Yours</span>
         )}
@@ -386,7 +493,7 @@ function ListingCard({ item, isMine, isSaved, onOpen, onSave }) {
           {item.title}
         </div>
         <div style={{ fontSize:18, fontWeight:900, color:'#6366f1', marginBottom:6 }}>
-          ₹{item.price.toLocaleString('en-IN')}
+          ₹{(item.price||0).toLocaleString('en-IN')}
         </div>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:4 }}>
           <span style={{
@@ -395,8 +502,8 @@ function ListingCard({ item, isMine, isSaved, onOpen, onSave }) {
           }}>{item.condition}</span>
           <span style={{ fontSize:11, color:'var(--ch-text-muted)' }}>{item.location}</span>
         </div>
-        <div style={{ marginTop:8, fontSize:11, color:'var(--ch-text-xs)', display:'flex', alignItems:'center', gap:10 }}>
-          <span>{timeAgo(item.postedAt)}</span>
+        <div style={{ marginTop:8, fontSize:11, color:'var(--ch-text-muted)', display:'flex', alignItems:'center', gap:10 }}>
+          <span>{timeAgo(item.createdAt)}</span>
           <span><Eye size={11} style={{ verticalAlign:'middle' }} /> {item.views || 0}</span>
         </div>
       </div>
@@ -405,35 +512,46 @@ function ListingCard({ item, isMine, isSaved, onOpen, onSave }) {
 }
 
 /* ── Detail View ─────────────────────────────────────────── */
-function DetailView({ item, user, onBack, onSave, onStatusChange, onDelete, isSaved }) {
-  const isMine = item.sellerId === user?._id;
+function DetailView({ item, user, onBack, onStatusChange, onDelete }) {
+  const isMine = item.seller?._id === user?._id || item.seller === user?._id;
   const ss = STATUS_STYLE[item.status] || STATUS_STYLE.Available;
+  const [imgIdx, setImgIdx] = useState(0);
 
   return (
     <div style={{ maxWidth:860, margin:'0 auto' }}>
-      {/* Back */}
       <button style={{ ...btnSecondary, marginBottom:16 }} onClick={onBack}>
         <ChevronLeft size={16} /> Back to Marketplace
       </button>
 
       <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1.2fr) minmax(0,1fr)', gap:20 }} className="mp-detail-grid">
-        {/* Left: Image + status */}
+        {/* Left: Image gallery */}
         <div>
           <div style={{ borderRadius:16, overflow:'hidden', background:'#f1f5f9', aspectRatio:'4/3' }}>
-            {item.images?.[0]
-              ? <img src={item.images[0]} alt={item.title} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+            {item.images?.length > 0
+              ? <img src={item.images[imgIdx]} alt={item.title} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
               : <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><Package size={60} style={{ opacity:0.15 }} /></div>
             }
           </div>
+          {/* Thumbnail strip */}
+          {item.images?.length > 1 && (
+            <div style={{ display:'flex', gap:6, marginTop:8, flexWrap:'wrap' }}>
+              {item.images.map((img, i) => (
+                <img
+                  key={i} src={img} alt=""
+                  onClick={() => setImgIdx(i)}
+                  style={{
+                    width:56, height:56, objectFit:'cover', borderRadius:8, cursor:'pointer',
+                    border: `2px solid ${imgIdx===i ? '#6366f1' : 'var(--ch-card-border)'}`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {/* Stats */}
           <div style={{ display:'flex', gap:12, marginTop:12 }}>
             <div style={{ flex:1, padding:'10px 14px', background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:10, textAlign:'center' }}>
               <div style={{ fontSize:16, fontWeight:800, color:'var(--ch-text-primary)' }}>{item.views || 0}</div>
               <div style={{ fontSize:11, color:'var(--ch-text-muted)' }}>Views</div>
-            </div>
-            <div style={{ flex:1, padding:'10px 14px', background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:10, textAlign:'center' }}>
-              <div style={{ fontSize:16, fontWeight:800, color:'#ef4444' }}>{item.saved?1:0}</div>
-              <div style={{ fontSize:11, color:'var(--ch-text-muted)' }}>Saved</div>
             </div>
             <div style={{ flex:1, padding:'10px 14px', background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:10, textAlign:'center' }}>
               <div style={{ fontSize:11, fontWeight:700, padding:'2px 0', ...ss }}>{item.status}</div>
@@ -454,13 +572,14 @@ function DetailView({ item, user, onBack, onSave, onStatusChange, onDelete, isSa
             </div>
             <h2 style={{ fontSize:18, fontWeight:900, color:'var(--ch-text-primary)', marginBottom:6, lineHeight:1.3 }}>{item.title}</h2>
             <div style={{ fontSize:28, fontWeight:900, color:'#6366f1', marginBottom:12 }}>
-              ₹{item.price.toLocaleString('en-IN')}
+              ₹{(item.price||0).toLocaleString('en-IN')}
             </div>
-            <p style={{ fontSize:13, color:'var(--ch-text-muted)', lineHeight:1.6, marginBottom:12 }}>{item.desc}</p>
+            <p style={{ fontSize:13, color:'var(--ch-text-muted)', lineHeight:1.6, marginBottom:12 }}>{item.description}</p>
             <div style={{ display:'flex', flexDirection:'column', gap:6, fontSize:12 }}>
-              <div><span style={{ fontWeight:700, color:'var(--ch-text-primary)' }}>📍 Location:</span> <span style={{ color:'var(--ch-text-muted)' }}>{item.location}</span></div>
-              <div><span style={{ fontWeight:700, color:'var(--ch-text-primary)' }}>👤 Seller:</span> <span style={{ color:'var(--ch-text-muted)' }}>{item.sellerName}</span></div>
-              <div><span style={{ fontWeight:700, color:'var(--ch-text-primary)' }}>🕒 Posted:</span> <span style={{ color:'var(--ch-text-muted)' }}>{new Date(item.postedAt).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}</span></div>
+              {item.location && <div><span style={{ fontWeight:700, color:'var(--ch-text-primary)' }}>📍 Location:</span> <span style={{ color:'var(--ch-text-muted)' }}>{item.location}</span></div>}
+              <div><span style={{ fontWeight:700, color:'var(--ch-text-primary)' }}>👤 Seller:</span> <span style={{ color:'var(--ch-text-muted)' }}>{item.sellerName || item.seller?.name}</span></div>
+              <div><span style={{ fontWeight:700, color:'var(--ch-text-primary)' }}>🕒 Posted:</span> <span style={{ color:'var(--ch-text-muted)' }}>{new Date(item.createdAt).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}</span></div>
+              {item.contactPhone && <div><span style={{ fontWeight:700, color:'var(--ch-text-primary)' }}>📞 Phone:</span> <span style={{ color:'var(--ch-text-muted)' }}>{item.contactPhone}</span></div>}
             </div>
           </div>
 
@@ -473,15 +592,9 @@ function DetailView({ item, user, onBack, onSave, onStatusChange, onDelete, isSa
               <button style={{ ...btnSecondary, justifyContent:'center', padding:'11px', fontSize:14 }}>
                 💰 Make an Offer
               </button>
-              <div style={{ display:'flex', gap:8 }}>
-                <button onClick={onSave} style={{ ...btnSecondary, flex:1, justifyContent:'center' }}>
-                  <Heart size={14} fill={isSaved?'#ef4444':'none'} color={isSaved?'#ef4444':'currentColor'} />
-                  {isSaved ? 'Saved' : 'Save'}
-                </button>
-                <button style={{ ...btnSecondary, flex:1, justifyContent:'center', color:'#ef4444', borderColor:'#fca5a5' }}>
-                  <Flag size={14} /> Report
-                </button>
-              </div>
+              <button style={{ ...btnSecondary, justifyContent:'center', color:'#ef4444', borderColor:'#fca5a5' }}>
+                <Flag size={14} /> Report
+              </button>
             </div>
           )}
 
@@ -491,7 +604,7 @@ function DetailView({ item, user, onBack, onSave, onStatusChange, onDelete, isSa
               <div style={{ fontSize:12, fontWeight:800, color:'var(--ch-text-muted)', marginBottom:10, textTransform:'uppercase', letterSpacing:'0.5px' }}>Manage Listing</div>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {['Available','Reserved','Sold'].map(s => (
-                  <button key={s} onClick={() => onStatusChange(item.id, s)} style={{
+                  <button key={s} onClick={() => onStatusChange(item._id, s)} style={{
                     display:'flex', alignItems:'center', gap:8, padding:'9px 14px',
                     borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700,
                     border: `1px solid ${item.status===s ? (STATUS_STYLE[s].color) : 'var(--ch-card-border)'}`,
@@ -502,7 +615,7 @@ function DetailView({ item, user, onBack, onSave, onStatusChange, onDelete, isSa
                     Mark as {s}
                   </button>
                 ))}
-                <button onClick={() => { if(confirm('Delete this listing?')) onDelete(item.id); }}
+                <button onClick={() => { if(window.confirm('Delete this listing?')) onDelete(item._id); }}
                   style={{ ...btnSecondary, justifyContent:'center', color:'#ef4444', borderColor:'#fca5a5', marginTop:4 }}>
                   <Trash2 size={14} /> Delete Listing
                 </button>
@@ -515,36 +628,34 @@ function DetailView({ item, user, onBack, onSave, onStatusChange, onDelete, isSa
   );
 }
 
-/* ── Sell Form ────────────────────────────────────────────── */
+/* ── Sell Form (with photo upload) ────────────────────────── */
 function SellForm({ user, onBack, onSave }) {
   const [form, setForm] = useState({
     title:'', category:'furniture', price:'', condition:'Good',
-    desc:'', location: user?.villa?.villaNumber ? `Tower, Apt ${user.villa.villaNumber}` : '',
+    description:'', location: '',
+    contactPhone:'', contactEmail: user?.email || '',
   });
+  const [images, setImages] = useState([]); // [{file, preview}]
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.title || !form.price) { setError('Title and price are required.'); return; }
     setSaving(true);
-    await new Promise(r => setTimeout(r, 600));
-    const listing = {
-      id: Date.now().toString(),
-      ...form,
-      price: Number(form.price),
-      status: 'Available',
-      sellerId: user?._id || 'me',
-      sellerName: user?.name || 'Me',
-      images: [],
-      postedAt: new Date().toISOString(),
-      views: 0,
-      saved: false,
-    };
-    onSave(listing);
-    setSaving(false);
+    setError('');
+    try {
+      const files = images.map(i => i.file);
+      await onSave({ ...form, price: Number(form.price) }, files);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to publish listing.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div style={{ maxWidth:620, margin:'0 auto' }}>
+    <div style={{ maxWidth:660, margin:'0 auto' }}>
       <button style={{ ...btnSecondary, marginBottom:16 }} onClick={onBack}>
         <ChevronLeft size={16} /> Back
       </button>
@@ -552,8 +663,22 @@ function SellForm({ user, onBack, onSave }) {
         <h2 style={{ fontSize:17, fontWeight:900, color:'var(--ch-text-primary)', marginBottom:20 }}>
           📦 List an Item for Sale
         </h2>
+        {error && (
+          <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:13, color:'#991b1b' }}>
+            {error}
+          </div>
+        )}
         <form onSubmit={handleSubmit}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+
+            {/* Photos upload */}
+            <div style={{ gridColumn:'1/-1' }}>
+              <label style={{ fontSize:11, fontWeight:700, color:'var(--ch-text-muted)', display:'block', marginBottom:5 }}>
+                📷 Photos (up to 5)
+              </label>
+              <ImageUploader images={images} onChange={setImages} max={5} />
+            </div>
+
             <div style={{ gridColumn:'1/-1' }}>
               <label style={{ fontSize:11, fontWeight:700, color:'var(--ch-text-muted)', display:'block', marginBottom:5 }}>Item Title *</label>
               <input style={inp} required placeholder="e.g. Wooden dining table" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} />
@@ -578,20 +703,30 @@ function SellForm({ user, onBack, onSave }) {
               <label style={{ fontSize:11, fontWeight:700, color:'var(--ch-text-muted)', display:'block', marginBottom:5 }}>Location / Block</label>
               <input style={inp} placeholder="e.g. Tower B, Floor 3" value={form.location} onChange={e=>setForm({...form,location:e.target.value})} />
             </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, color:'var(--ch-text-muted)', display:'block', marginBottom:5 }}>Contact Phone</label>
+              <input style={inp} placeholder="+91 9999999999" value={form.contactPhone} onChange={e=>setForm({...form,contactPhone:e.target.value})} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, color:'var(--ch-text-muted)', display:'block', marginBottom:5 }}>Contact Email</label>
+              <input style={inp} type="email" placeholder="your@email.com" value={form.contactEmail} onChange={e=>setForm({...form,contactEmail:e.target.value})} />
+            </div>
             <div style={{ gridColumn:'1/-1' }}>
               <label style={{ fontSize:11, fontWeight:700, color:'var(--ch-text-muted)', display:'block', marginBottom:5 }}>Description *</label>
               <textarea style={{ ...inp, minHeight:100, resize:'vertical' }} required
                 placeholder="Describe the item — age, condition details, reason for selling, included accessories…"
-                value={form.desc} onChange={e=>setForm({...form,desc:e.target.value})} />
+                value={form.description} onChange={e=>setForm({...form,description:e.target.value})} />
             </div>
           </div>
           <div style={{ marginTop:6, padding:'12px 14px', borderRadius:10, background:'#eff6ff', border:'1px solid #bfdbfe', fontSize:12, color:'#1d4ed8' }}>
-            ℹ️ Your contact details will be shared only with interested buyers after they initiate contact. Listings are visible only to community residents.
+            ℹ️ Your contact details will be shared only with interested buyers. Listings are visible only to community residents.
           </div>
           <div style={{ display:'flex', gap:10, marginTop:20 }}>
             <button type="button" style={{ ...btnSecondary, flex:1, justifyContent:'center' }} onClick={onBack}>Cancel</button>
             <button type="submit" disabled={saving} style={{ ...btnPrimary, flex:1, justifyContent:'center' }}>
-              {saving ? <><Loader2 size={15} style={{ animation:'spin 1s linear infinite' }} /> Publishing…</> : <><CheckCircle size={15} /> Publish Listing</>}
+              {saving
+                ? <><Loader2 size={15} style={{ animation:'spin 1s linear infinite' }} /> Publishing…</>
+                : <><CheckCircle size={15} /> Publish Listing</>}
             </button>
           </div>
         </form>
@@ -601,7 +736,7 @@ function SellForm({ user, onBack, onSave }) {
 }
 
 /* ── My Listings ─────────────────────────────────────────── */
-function MyListings({ listings, user, onBack, onNew, onOpen, onStatusChange, onDelete }) {
+function MyListings({ listings, user, loading, onBack, onNew, onOpen, onStatusChange, onDelete }) {
   return (
     <div style={{ maxWidth:800, margin:'0 auto' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:20 }}>
@@ -625,7 +760,7 @@ function MyListings({ listings, user, onBack, onNew, onOpen, onStatusChange, onD
           {listings.map(item => {
             const ss = STATUS_STYLE[item.status] || STATUS_STYLE.Available;
             return (
-              <div key={item.id} style={{
+              <div key={item._id} style={{
                 background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)',
                 borderRadius:14, padding:16, display:'flex', alignItems:'center', gap:14, flexWrap:'wrap',
               }}>
@@ -637,21 +772,22 @@ function MyListings({ listings, user, onBack, onNew, onOpen, onStatusChange, onD
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:13, fontWeight:700, color:'var(--ch-text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.title}</div>
-                  <div style={{ fontSize:16, fontWeight:900, color:'#6366f1' }}>₹{item.price.toLocaleString('en-IN')}</div>
+                  <div style={{ fontSize:16, fontWeight:900, color:'#6366f1' }}>₹{(item.price||0).toLocaleString('en-IN')}</div>
                   <div style={{ display:'flex', gap:8, marginTop:4, flexWrap:'wrap', alignItems:'center' }}>
                     <span style={{ ...ss, padding:'2px 9px', borderRadius:99, fontSize:11, fontWeight:800 }}>{item.status}</span>
                     <span style={{ fontSize:11, color:'var(--ch-text-muted)' }}><Eye size={11} style={{verticalAlign:'middle'}}/> {item.views||0} views</span>
-                    <span style={{ fontSize:11, color:'var(--ch-text-muted)' }}>{timeAgo(item.postedAt)}</span>
+                    <span style={{ fontSize:11, color:'var(--ch-text-muted)' }}>{timeAgo(item.createdAt)}</span>
+                    {item.images?.length > 0 && <span style={{ fontSize:11, color:'var(--ch-text-muted)' }}>📷 {item.images.length} photo{item.images.length>1?'s':''}</span>}
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:8, flexShrink:0 }}>
                   <button style={btnSecondary} onClick={() => onOpen(item)}><Eye size={14}/></button>
                   <select style={{ ...inp, width:'auto', padding:'8px 12px' }}
                     value={item.status}
-                    onChange={e => onStatusChange(item.id, e.target.value)}>
+                    onChange={e => onStatusChange(item._id, e.target.value)}>
                     {['Available','Reserved','Sold'].map(s=><option key={s}>{s}</option>)}
                   </select>
-                  <button onClick={() => { if(confirm('Delete?')) onDelete(item.id); }}
+                  <button onClick={() => { if(window.confirm('Delete?')) onDelete(item._id); }}
                     style={{ ...btnSecondary, color:'#ef4444', borderColor:'#fca5a5' }}>
                     <Trash2 size={14}/>
                   </button>

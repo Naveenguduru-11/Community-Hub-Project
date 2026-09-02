@@ -42,7 +42,14 @@ const proposalSchema = new mongoose.Schema({
     quorumReached: { type: Boolean },
     closedAt: { type: Date },
     closedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
-  }
+  },
+
+  // Photo / document attachments
+  attachments: [{
+    url:  { type: String },   // Cloudinary URL or base64
+    name: { type: String, default: '' },
+    type: { type: String, default: 'image' }  // 'image' | 'document'
+  }]
 }, { timestamps: true });
 
 proposalSchema.index({ community: 1, status: 1, votingDeadline: -1 });
