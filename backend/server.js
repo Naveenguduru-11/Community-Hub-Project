@@ -9,6 +9,7 @@ dotenv.config();
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 const { initSocket } = require('./services/socketService');
+const { seedAmenities } = require('./seeders/amenitySeeder');
 
 // Route Imports
 const authRoutes = require('./routes/authRoutes');
@@ -75,7 +76,10 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 // Connect DB & Start Server
-connectDB().then(() => {
+connectDB().then(async () => {
+  // Auto-seed default amenities if DB is empty
+  await seedAmenities();
+
   server.listen(PORT, () => {
     console.log(`=================================================`);
     console.log(`🚀 CommunityHub Backend API Server running on port ${PORT}`);
@@ -83,3 +87,4 @@ connectDB().then(() => {
     console.log(`=================================================`);
   });
 });
+

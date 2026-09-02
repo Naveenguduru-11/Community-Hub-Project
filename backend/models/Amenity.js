@@ -15,7 +15,7 @@ const maintenanceSchema = new mongoose.Schema({
 const amenitySchema = new mongoose.Schema({
   name:        { type: String, required: true, trim: true },
   description: { type: String, default: '' },
-  category:    { type: String, enum: ['Hall','Fitness','Sports','Kids','Other'], default: 'Other' },
+  category:    { type: String, enum: ['Hall','Fitness','Sports','Kids','Entertainment','Accommodation','Other'], default: 'Other' },
   emoji:       { type: String, default: '🏢' },
   capacity:    { type: Number, default: 0 },
   operatingHours: { type: String, default: '6:00 AM – 10:00 PM' },
