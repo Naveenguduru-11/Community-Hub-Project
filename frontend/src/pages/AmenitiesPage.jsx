@@ -147,10 +147,7 @@ function fmtDate(str) {
 function isInMaintenance(amenity, dateStr) {
   return amenity.maintenance.some(m => dateStr >= m.start && dateStr <= m.end);
 }
-function getBookings() {
-  try { return JSON.parse(localStorage.getItem('ch_amenity_bookings') || '[]'); } catch { return []; }
-}
-function saveBookings(b) { localStorage.setItem('ch_amenity_bookings', JSON.stringify(b)); }
+// Bookings are now fully API-driven (no localStorage)
 
 /* ══════════════════════════════════════════════════════════ */
 export const AmenitiesPage = () => {
@@ -162,9 +159,26 @@ export const AmenitiesPage = () => {
   const [loadingAmenities, setLoadingAmenities] = useState(true);
   const [view, setView]     = useState('list'); // list | detail | book | confirm | mybook | admin
   const [selected, setSelected] = useState(null);
-  const [bookings, setBookings] = useState(getBookings);
   const [catFilter, setCatFilter] = useState('All');
   const [tab, setTab]       = useState('upcoming'); // upcoming|completed|cancelled
+
+  // My bookings — fetched from API
+  const [myBookings, setMyBookings]     = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  // Admin bookings panel (localStorage fallback for non-DB amenities)
+  const [bookings] = useState([]);
+
+  const loadMyBookings = async () => {
+    setBookingsLoading(true);
+    try {
+      const res = await amenityService.getMyBookings();
+      setMyBookings(res.data.bookings || []);
+    } catch {
+      setMyBookings([]);
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
 
   // Fetch amenities from API (fall back to seed if empty)
   useEffect(() => {
@@ -180,24 +194,26 @@ export const AmenitiesPage = () => {
       }
     };
     load();
+    loadMyBookings();
   }, []);
 
   const cats = ['All', ...new Set(AMENITIES_SEED.map(a=>a.category))];
   const filtered = catFilter==='All' ? amenities : amenities.filter(a=>a.category===catFilter);
 
-  /* My bookings */
-  const myBookings = bookings.filter(b => b.userId === (user?._id || 'me'));
   const tabBookings = myBookings.filter(b => {
-    if (tab==='upcoming')   return ['confirmed','pending'].includes(b.status);
-    if (tab==='completed')  return b.status==='completed';
-    if (tab==='cancelled')  return b.status==='cancelled';
+    if (tab==='upcoming')  return ['confirmed','pending'].includes(b.status);
+    if (tab==='completed') return b.status==='completed';
+    if (tab==='cancelled') return b.status==='cancelled';
     return true;
   });
 
-  const cancelBooking = (id) => {
-    const updated = bookings.map(b => b.id===id ? {...b, status:'cancelled'} : b);
-    setBookings(updated);
-    saveBookings(updated);
+  const cancelBooking = async (id) => {
+    try {
+      await amenityService.updateBookingStatus(id, 'cancelled');
+      setMyBookings(prev => prev.map(b => (b._id || b.id) === id ? { ...b, status: 'cancelled' } : b));
+    } catch {
+      alert('Could not cancel booking. Please try again.');
+    }
   };
 
   /* Admin view */
@@ -223,12 +239,9 @@ export const AmenitiesPage = () => {
     return <BookingForm
       amenity={selected}
       user={user}
-      existingBookings={bookings}
       onBack={() => setView('detail')}
       onConfirm={(booking) => {
-        const updated = [booking, ...bookings];
-        setBookings(updated);
-        saveBookings(updated);
+        loadMyBookings(); // refresh my bookings from API
         setView('confirm');
         setSelected({ ...selected, _booking: booking });
       }}
@@ -273,7 +286,12 @@ export const AmenitiesPage = () => {
           ))}
         </div>
 
-        {tabBookings.length === 0 ? (
+        {bookingsLoading ? (
+          <div style={{ textAlign:'center', padding:'48px 20px' }}>
+            <Loader2 size={32} style={{ opacity:0.3, margin:'0 auto', display:'block', animation:'spin 1s linear infinite' }} />
+            <p style={{ marginTop:12, fontSize:13, color:'var(--ch-text-muted)' }}>Loading your bookings…</p>
+          </div>
+        ) : tabBookings.length === 0 ? (
           <div style={{ textAlign:'center', padding:'48px 20px', background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:16 }}>
             <Calendar size={48} style={{ opacity:0.12, margin:'0 auto 12px', display:'block' }} />
             <p style={{ fontSize:14, fontWeight:700, color:'var(--ch-text-primary)', marginBottom:6 }}>No {tab} bookings</p>
@@ -282,31 +300,36 @@ export const AmenitiesPage = () => {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             {tabBookings.map(b => {
-              const am = amenities.find(a=>a.id===b.amenityId);
+              const amenityInfo = b.amenity || amenities.find(a => (a._id || a.id) === b.amenityId);
+              const coverImg = amenityInfo?.images?.[0] || amenityInfo?.image;
               const statusColor = { confirmed:'#d1fae5', pending:'#fef3c7', cancelled:'#fee2e2', completed:'#eff6ff' };
               const statusText  = { confirmed:'#065f46', pending:'#92400e', cancelled:'#991b1b', completed:'#1d4ed8' };
+              const bId = b._id || b.id;
+              const guestCount = b.guestCount ?? b.guests ?? 1;
+              const amount = b.totalAmount ?? b.amount ?? 0;
               return (
-                <div key={b.id} style={{ background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:14, overflow:'hidden' }}>
+                <div key={bId} style={{ background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:14, overflow:'hidden' }}>
                   <div style={{ display:'flex', gap:14, padding:16, alignItems:'center', flexWrap:'wrap' }}>
                     <div style={{ width:60, height:60, borderRadius:12, overflow:'hidden', flexShrink:0 }}>
-                      {am?.image ? <img src={am.image} alt={am?.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                        : <div style={{ width:'100%', height:'100%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>{am?.emoji}</div>}
+                      {coverImg
+                        ? <img src={coverImg} alt={amenityInfo?.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                        : <div style={{ width:'100%', height:'100%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>{amenityInfo?.emoji || '🏢'}</div>}
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:14, fontWeight:800, color:'var(--ch-text-primary)' }}>{am?.name || b.amenityId}</div>
+                      <div style={{ fontSize:14, fontWeight:800, color:'var(--ch-text-primary)' }}>{amenityInfo?.name || b.amenityName || '—'}</div>
                       <div style={{ fontSize:12, color:'var(--ch-text-muted)', marginTop:2 }}>
                         📅 {fmtDate(b.date)} &nbsp; 🕐 {b.slotLabel}
                       </div>
                       <div style={{ fontSize:12, color:'var(--ch-text-muted)' }}>
-                        👥 {b.guests} guest{b.guests!==1?'s':''} &nbsp;
-                        {b.amount > 0 ? `💳 ₹${b.amount}` : '🆓 Free'}
+                        👥 {guestCount} guest{guestCount!==1?'s':''} &nbsp;
+                        {amount > 0 ? `💳 ₹${amount}` : '🆓 Free'}
                       </div>
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, flexShrink:0 }}>
                       <span style={{ padding:'3px 10px', borderRadius:99, fontSize:11, fontWeight:800, background:statusColor[b.status], color:statusText[b.status], textTransform:'capitalize' }}>{b.status}</span>
-                      <div style={{ fontSize:10, color:'var(--ch-text-xs)', fontFamily:'monospace' }}>#{b.id}</div>
+                      <div style={{ fontSize:10, color:'var(--ch-text-muted)', fontFamily:'monospace' }}>#{bId.toString().slice(-8)}</div>
                       {b.status==='confirmed' && (
-                        <button onClick={()=>{ if(confirm('Cancel this booking?')) cancelBooking(b.id); }}
+                        <button onClick={() => { if(confirm('Cancel this booking?')) cancelBooking(bId); }}
                           style={{ fontSize:11, fontWeight:700, color:'#ef4444', background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:8, padding:'4px 10px', cursor:'pointer' }}>
                           Cancel
                         </button>
@@ -538,41 +561,87 @@ function AmenityDetail({ amenity, user, bookings, onBack, onBook }) {
 }
 
 /* ── Booking Form ─────────────────────────────────────────── */
-function BookingForm({ amenity, user, existingBookings, onBack, onConfirm }) {
-  const [date, setDate]   = useState(getTodayStr());
-  const [slot, setSlot]   = useState(amenity.slots[0]);
+function BookingForm({ amenity, user, onBack, onConfirm }) {
+  const [date, setDate]     = useState(getTodayStr());
+  const [slot, setSlot]     = useState(null);
   const [guests, setGuests] = useState(1);
   const [confirming, setConfirming] = useState(false);
+  const [bookingError, setBookingError] = useState('');
+
+  // Real-time booked slots fetched from the server
+  const [bookedSlotIds, setBookedSlotIds] = useState([]);
+  const [loadingSlots, setLoadingSlots]   = useState(false);
+
+  const amenityId = amenity._id || amenity.id;
+
+  // Fetch which slots are already booked for the selected date
+  useEffect(() => {
+    const fetchBooked = async () => {
+      setLoadingSlots(true);
+      setBookedSlotIds([]);
+      setSlot(null);
+      try {
+        // Only works for DB amenities (MongoDB ObjectId)
+        if (/^[a-f\d]{24}$/i.test(String(amenityId))) {
+          const res = await amenityService.getBookings(amenityId, { date });
+          const confirmed = (res.data.bookings || []).filter(b => b.status !== 'cancelled');
+          setBookedSlotIds(confirmed.map(b => b.slotId || b.slotLabel));
+        }
+      } catch { /* ignore — treat all as available */ }
+      finally { setLoadingSlots(false); }
+    };
+    fetchBooked();
+  }, [date, amenityId]);
+
+  // Auto-select first available slot after loading
+  useEffect(() => {
+    if (!loadingSlots && amenity.slots?.length > 0) {
+      const firstAvail = amenity.slots.find(s => !isSlotBooked(s));
+      setSlot(firstAvail || null);
+    }
+  }, [loadingSlots, bookedSlotIds]);
+
+  const isSlotBooked = (s) => {
+    const sid = s._id?.toString() || s.id;
+    return bookedSlotIds.includes(sid) || bookedSlotIds.includes(s.label);
+  };
 
   const inMaint = isInMaintenance(amenity, date);
-  const slotsForDate = amenity.slots;
-  const bookedSlotIds = existingBookings
-    .filter(b => b.amenityId===amenity.id && b.date===date && b.status==='confirmed')
-    .map(b => b.slotId);
-
   const guestCharge = (guests - 1) * (slot?.guestCharge || 0);
   const total = (slot?.price || 0) + guestCharge;
 
   const handleConfirm = async (e) => {
     e.preventDefault();
+    if (!slot) return;
     setConfirming(true);
-    await new Promise(r => setTimeout(r, 700));
-    const booking = {
-      id: 'BK' + Date.now().toString().slice(-6),
-      amenityId: amenity.id,
-      amenityName: amenity.name,
-      userId: user?._id || 'me',
-      userName: user?.name || 'Resident',
-      date,
-      slotId: slot.id,
-      slotLabel: slot.label,
-      guests,
-      amount: total,
-      status: 'confirmed',
-      bookedAt: new Date().toISOString(),
-    };
-    onConfirm(booking);
-    setConfirming(false);
+    setBookingError('');
+    try {
+      const slotId = slot._id?.toString() || slot.id;
+      const res = await amenityService.createBooking(amenityId, {
+        date,
+        slotId,
+        slotLabel: slot.label,
+        guestCount: guests,
+      });
+      const booking = res.data.booking || {};
+      onConfirm({
+        _id: booking._id,
+        id: booking._id,
+        amenityId,
+        amenityName: amenity.name,
+        date,
+        slotLabel: slot.label,
+        guestCount: guests,
+        totalAmount: total,
+        amount: total,
+        status: 'confirmed',
+      });
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Booking failed. The slot may have just been taken.';
+      setBookingError(msg);
+    } finally {
+      setConfirming(false);
+    }
   };
 
   return (
@@ -611,14 +680,20 @@ function BookingForm({ amenity, user, existingBookings, onBack, onConfirm }) {
             <label style={{ fontSize:11, fontWeight:700, color:'var(--ch-text-muted)', display:'block', marginBottom:8 }}>
               🕐 Select Time Slot
             </label>
+            {loadingSlots ? (
+              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', background:'var(--ch-body-bg)', borderRadius:12 }}>
+                <Loader2 size={16} style={{ animation:'spin 1s linear infinite', opacity:0.4 }} />
+                <span style={{ fontSize:13, color:'var(--ch-text-muted)' }}>Checking slot availability…</span>
+              </div>
+            ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-              {slotsForDate.map(s => {
-                const isBooked = bookedSlotIds.includes(s.id);
-                const isSel = slot?.id === s.id;
+              {amenity.slots.map(s => {
+                const isBooked = isSlotBooked(s);
+                const isSel = slot?.label === s.label;
                 return (
-                  <button key={s.id} type="button"
+                  <button key={s._id || s.id} type="button"
                     disabled={isBooked}
-                    onClick={() => setSlot(s)}
+                    onClick={() => !isBooked && setSlot(s)}
                     style={{
                       display:'flex', justifyContent:'space-between', alignItems:'center',
                       padding:'11px 16px', borderRadius:12, border:'2px solid', cursor: isBooked ? 'not-allowed' : 'pointer',
@@ -634,6 +709,7 @@ function BookingForm({ amenity, user, existingBookings, onBack, onConfirm }) {
                 );
               })}
             </div>
+            )}
           </div>
 
           {/* Guests */}
@@ -685,9 +761,15 @@ function BookingForm({ amenity, user, existingBookings, onBack, onConfirm }) {
             By confirming, you agree to the community amenity usage policy. Cancel up to 24 hours before for a full refund.
           </div>
 
-          <button type="submit" disabled={confirming || inMaint || !slot} style={{
+          {bookingError && (
+            <div style={{ marginBottom:12, background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', fontSize:13, color:'#991b1b', fontWeight:600 }}>
+              ⚠️ {bookingError}
+            </div>
+          )}
+
+          <button type="submit" disabled={confirming || inMaint || !slot || loadingSlots} style={{
             ...btnPrimary, width:'100%', justifyContent:'center', padding:'13px', fontSize:14,
-            background: (inMaint||!slot) ? '#9ca3af' : '#6366f1',
+            background: (inMaint || !slot || loadingSlots) ? '#9ca3af' : '#6366f1',
           }}>
             {confirming
               ? <><Loader2 size={16} style={{ animation:'spin 1s linear infinite' }}/> Processing…</>
