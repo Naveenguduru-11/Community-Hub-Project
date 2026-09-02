@@ -195,8 +195,12 @@ exports.createBooking = async (req, res, next) => {
     const { date, slotId, slotLabel, guestCount, notes } = req.body;
     const isConnected = mongoose.connection.readyState === 1;
 
-    if (!isConnected || !mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(503).json({ success: false, message: 'Database not connected' });
+    if (!isConnected) {
+      return res.status(503).json({ success: false, message: 'Server database is not connected. Please try again shortly.' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: `Invalid amenity ID "${id}". Please refresh the page and try again.` });
     }
 
     const amenity = await Amenity.findById(id);
