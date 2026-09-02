@@ -201,8 +201,21 @@ export const AmenitiesPage = () => {
   };
 
   /* Admin view */
+  const refreshAmenities = async () => {
+    try {
+      const res = await amenityService.getAmenities();
+      const data = res.data.amenities || [];
+      if (data.length > 0) setAmenities(data);
+    } catch { /* keep current */ }
+  };
+
   if (isAdmin && view === 'admin') {
-    return <AdminView amenities={amenities} bookings={bookings} onBack={() => setView('list')} />;
+    return <AdminView
+      amenities={amenities}
+      bookings={bookings}
+      onBack={() => setView('list')}
+      onRefresh={refreshAmenities}
+    />;
   }
 
   /* Booking flow */
@@ -725,184 +738,554 @@ function BookingConfirm({ booking, amenity, onDone }) {
 }
 
 /* ── Admin Panel ─────────────────────────────────────────── */
-function AdminView({ amenities, bookings, onBack }) {
+function AdminView({ amenities, bookings, onBack, onRefresh }) {
   const today = getTodayStr();
-  const todayBookings = bookings.filter(b=>b.date===today && b.status==='confirmed');
-  const revenue = bookings.filter(b=>b.status==='confirmed').reduce((s,b)=>s+b.amount,0);
-  const popular = amenities.map(a=>({ ...a, count:bookings.filter(b=>b.amenityId===a.id).length }))
-    .sort((a,b)=>b.count-a.count)[0];
+  const todayBookings = bookings.filter(b => b.date === today && b.status === 'confirmed');
+  const revenue = bookings.filter(b => b.status === 'confirmed').reduce((s, b) => s + (b.amount || 0), 0);
+  const popular = [...amenities]
+    .map(a => ({ ...a, count: bookings.filter(b => b.amenityId === (a._id || a.id)).length }))
+    .sort((a, b) => b.count - a.count)[0];
 
-  const [uploadingId, setUploadingId] = useState(null);
-  const [uploadToast, setUploadToast] = useState('');
-  const [amenityImages, setAmenityImages] = useState({});
-  const photoRef = useRef();
-  const [targetAmenityId, setTargetAmenityId] = useState(null);
+  const [adminTab, setAdminTab] = useState('amenities'); // amenities | bookings
+  const [showForm, setShowForm]   = useState(false);
+  const [editTarget, setEditTarget] = useState(null); // null = add mode
+  const [toast, setToast]         = useState('');
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
-  const showUploadToast = (msg) => { setUploadToast(msg); setTimeout(() => setUploadToast(''), 3000); };
+  const openAdd  = () => { setEditTarget(null); setShowForm(true); };
+  const openEdit = (a) => { setEditTarget(a); setShowForm(true); };
 
-  const triggerUpload = (amenityId) => {
-    setTargetAmenityId(amenityId);
-    photoRef.current.click();
-  };
-
-  const handlePhotoUpload = async (e) => {
-    const files = [...e.target.files];
-    if (!files.length || !targetAmenityId) return;
-    setUploadingId(targetAmenityId);
+  const handleDelete = async (a) => {
+    if (!window.confirm(`Delete "${a.name}"? All bookings for this amenity will be cancelled.`)) return;
     try {
-      const res = await amenityService.uploadImages(targetAmenityId, files);
-      setAmenityImages(prev => ({ ...prev, [targetAmenityId]: res.data.images?.[0] }));
-      showUploadToast('✅ Photos uploaded successfully!');
-    } catch {
-      showUploadToast('❌ Upload failed — amenity must be in the database first.');
-    } finally {
-      setUploadingId(null);
-      e.target.value = '';
-    }
+      await amenityService.deleteAmenity(a._id || a.id);
+      showToast(`🗑️ "${a.name}" deleted`);
+      onRefresh();
+    } catch { showToast('❌ Delete failed'); }
   };
+
+  if (showForm) {
+    return (
+      <AmenityForm
+        initial={editTarget}
+        onBack={() => setShowForm(false)}
+        onSaved={() => { setShowForm(false); onRefresh(); showToast(editTarget ? '✅ Amenity updated!' : '✅ Amenity created!'); }}
+      />
+    );
+  }
 
   return (
-    <div style={{ maxWidth:900, margin:'0 auto' }}>
-      <button style={{ ...btnSecondary, marginBottom:16 }} onClick={onBack}><ChevronLeft size={16}/> Back</button>
-      <h2 style={{ fontSize:18, fontWeight:900, color:'var(--ch-text-primary)', marginBottom:20 }}>🏢 Amenity Admin Panel</h2>
-
-      {/* Hidden file input */}
-      <input ref={photoRef} type="file" multiple accept="image/*" style={{ display:'none' }} onChange={handlePhotoUpload} />
-
-      {/* Upload toast */}
-      {uploadToast && (
+    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+      {/* Toast */}
+      {toast && (
         <div style={{
-          position:'fixed', bottom:24, right:24, zIndex:9999,
-          padding:'12px 20px', borderRadius:12, background:'#1a1a2e', color:'#fff',
-          fontSize:13, fontWeight:600, boxShadow:'0 8px 28px rgba(0,0,0,0.25)',
-        }}>{uploadToast}</div>
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+          padding: '12px 20px', borderRadius: 12, background: '#1a1a2e', color: '#fff',
+          fontSize: 13, fontWeight: 600, boxShadow: '0 8px 28px rgba(0,0,0,0.25)',
+        }}>{toast}</div>
       )}
 
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <button style={{ ...btnSecondary, marginBottom: 8 }} onClick={onBack}><ChevronLeft size={16} /> Back</button>
+          <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ch-text-primary)' }}>🏢 Amenity Management</h2>
+          <p style={{ fontSize: 13, color: 'var(--ch-text-muted)' }}>Add, edit and manage community clubs &amp; amenities</p>
+        </div>
+        <button style={{ ...btnPrimary, padding: '11px 20px' }} onClick={openAdd}>
+          <Plus size={16} /> Add New Amenity
+        </button>
+      </div>
+
       {/* Stats */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:14, marginBottom:24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 24 }}>
         {[
-          { label:"Total Amenities",     val:amenities.length,    color:'#6366f1', bg:'#ede9fe' },
-          { label:"Today's Bookings",    val:todayBookings.length, color:'#3b82f6', bg:'#dbeafe' },
-          { label:"Total Bookings",      val:bookings.length,      color:'#10b981', bg:'#d1fae5' },
-          { label:"Total Revenue",       val:`₹${revenue.toLocaleString('en-IN')}`, color:'#f59e0b', bg:'#fef3c7' },
-          { label:"Most Popular",        val:popular?.name || '—', color:'#ef4444', bg:'#fee2e2' },
-          { label:"Cancelled",           val:bookings.filter(b=>b.status==='cancelled').length, color:'#6b7280', bg:'#f3f4f6' },
+          { label: 'Total Amenities',  val: amenities.length,         color: '#6366f1', bg: '#ede9fe' },
+          { label: "Today's Bookings", val: todayBookings.length,     color: '#3b82f6', bg: '#dbeafe' },
+          { label: 'Total Bookings',   val: bookings.length,           color: '#10b981', bg: '#d1fae5' },
+          { label: 'Total Revenue',    val: `₹${revenue.toLocaleString('en-IN')}`, color: '#f59e0b', bg: '#fef3c7' },
+          { label: 'Most Popular',     val: popular?.name || '—',     color: '#ef4444', bg: '#fee2e2' },
         ].map(s => (
-          <div key={s.label} style={{ background:s.bg, borderRadius:14, padding:'14px 16px', borderLeft:`3px solid ${s.color}` }}>
-            <div style={{ fontSize:20, fontWeight:900, color:s.color, marginBottom:2 }}>{s.val}</div>
-            <div style={{ fontSize:11, color:s.color, fontWeight:700, opacity:0.75 }}>{s.label}</div>
+          <div key={s.label} style={{ background: s.bg, borderRadius: 14, padding: '14px 16px', borderLeft: `3px solid ${s.color}` }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: s.color, marginBottom: 2 }}>{s.val}</div>
+            <div style={{ fontSize: 11, color: s.color, fontWeight: 700, opacity: 0.75 }}>{s.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Amenity list with photo upload */}
-      <div style={{ background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:16, marginBottom:20 }}>
-        <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--ch-card-border)', fontSize:14, fontWeight:800, color:'var(--ch-text-primary)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          Amenities Overview
-          <span style={{ fontSize:11, color:'var(--ch-text-muted)', fontWeight:400 }}>Click 📷 to upload cover photos</span>
-        </div>
-        <div style={{ overflowX:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-            <thead>
-              <tr style={{ background:'var(--ch-body-bg)' }}>
-                {['Photo','Amenity','Category','Capacity','Slots','Bookings','Status','Actions'].map(h=>(
-                  <th key={h} style={{ padding:'10px 16px', textAlign:'left', fontWeight:700, color:'var(--ch-text-muted)', whiteSpace:'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {amenities.map(a => {
-                const bcount = bookings.filter(b=>b.amenityId===a.id).length;
-                const inM = isInMaintenance(a, today);
-                const coverImg = amenityImages[a._id || a.id] || a.image;
-                return (
-                  <tr key={a.id || a._id} style={{ borderTop:'1px solid var(--ch-card-border)' }}>
-                    <td style={{ padding:'10px 16px' }}>
-                      <div style={{ width:44, height:44, borderRadius:10, overflow:'hidden', background:'#f1f5f9', flexShrink:0 }}>
-                        {coverImg
-                          ? <img src={coverImg} alt={a.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>{a.emoji}</div>}
-                      </div>
-                    </td>
-                    <td style={{ padding:'12px 16px', fontWeight:700, color:'var(--ch-text-primary)' }}>{a.emoji} {a.name}</td>
-                    <td style={{ padding:'12px 16px', color:'var(--ch-text-muted)' }}>{a.category}</td>
-                    <td style={{ padding:'12px 16px', color:'var(--ch-text-muted)' }}>{a.capacity}</td>
-                    <td style={{ padding:'12px 16px', color:'var(--ch-text-muted)' }}>{a.slots.length}</td>
-                    <td style={{ padding:'12px 16px', fontWeight:700, color:'#6366f1' }}>{bcount}</td>
-                    <td style={{ padding:'12px 16px' }}>
-                      <span style={{ padding:'2px 9px', borderRadius:99, fontSize:11, fontWeight:800,
-                        background: inM ? '#fef3c7' : '#d1fae5', color: inM ? '#92400e' : '#065f46' }}>
-                        {inM ? '🔴 Maintenance' : '🟢 Active'}
-                      </span>
-                    </td>
-                    <td style={{ padding:'10px 16px' }}>
-                      <button
-                        onClick={() => triggerUpload(a._id || a.id)}
-                        disabled={uploadingId === (a._id || a.id)}
-                        style={{
-                          display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px',
-                          borderRadius:8, background:'#eff6ff', color:'#3b82f6', border:'1px solid #bfdbfe',
-                          cursor:'pointer', fontSize:11, fontWeight:700,
-                          opacity: uploadingId === (a._id || a.id) ? 0.6 : 1,
-                        }}
-                      >
-                        {uploadingId === (a._id || a.id)
-                          ? <><Loader2 size={11} style={{ animation:'spin 1s linear infinite' }}/> Uploading…</>
-                          : <><Camera size={11}/> Upload Photo</>}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--ch-card-bg)', border: '1px solid var(--ch-card-border)', borderRadius: 12, padding: 4, width: 'fit-content' }}>
+        {[{ key: 'amenities', label: '🏢 Amenities' }, { key: 'bookings', label: '📅 Bookings' }].map(t => (
+          <button key={t.key} onClick={() => setAdminTab(t.key)} style={{
+            padding: '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700,
+            background: adminTab === t.key ? '#6366f1' : 'transparent',
+            color: adminTab === t.key ? '#fff' : 'var(--ch-text-muted)',
+          }}>{t.label}</button>
+        ))}
       </div>
 
-      {/* Recent bookings */}
-      <div style={{ background:'var(--ch-card-bg)', border:'1px solid var(--ch-card-border)', borderRadius:16 }}>
-        <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--ch-card-border)', fontSize:14, fontWeight:800, color:'var(--ch-text-primary)' }}>
-          All Bookings ({bookings.length})
+      {/* ── Amenities Tab ── */}
+      {adminTab === 'amenities' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {amenities.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 20px', background: 'var(--ch-card-bg)', border: '1px solid var(--ch-card-border)', borderRadius: 16 }}>
+              <Building2 size={48} style={{ opacity: 0.12, margin: '0 auto 12px', display: 'block' }} />
+              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--ch-text-primary)', marginBottom: 6 }}>No amenities yet</p>
+              <p style={{ fontSize: 13, color: 'var(--ch-text-muted)', marginBottom: 16 }}>Add your first club or amenity to get started</p>
+              <button style={btnPrimary} onClick={openAdd}><Plus size={14} /> Add First Amenity</button>
+            </div>
+          ) : amenities.map(a => {
+            const inM = isInMaintenance(a, today);
+            const cc = CAT_COLORS[a.category] || { bg: '#f3f4f6', color: '#374151' };
+            const bcount = bookings.filter(b => b.amenityId === (a._id || a.id)).length;
+            const coverImg = a.images?.[0] || a.image;
+            return (
+              <div key={a._id || a.id} style={{
+                background: 'var(--ch-card-bg)', border: '1px solid var(--ch-card-border)',
+                borderRadius: 16, overflow: 'hidden', display: 'flex', alignItems: 'stretch',
+              }}>
+                {/* Cover photo strip */}
+                <div style={{ width: 120, minHeight: 100, flexShrink: 0, background: '#f1f5f9', position: 'relative', overflow: 'hidden' }}>
+                  {coverImg
+                    ? <img src={coverImg} alt={a.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <div style={{ height: '100%', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>{a.emoji || '🏢'}</div>}
+                </div>
+
+                {/* Info */}
+                <div style={{ flex: 1, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ch-text-primary)', marginBottom: 4 }}>
+                      {a.emoji} {a.name}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                      <span style={{ ...cc, padding: '2px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700 }}>{a.category}</span>
+                      <span style={{
+                        padding: '2px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700,
+                        background: inM ? '#fef3c7' : a.status === 'closed' ? '#fee2e2' : '#d1fae5',
+                        color: inM ? '#92400e' : a.status === 'closed' ? '#991b1b' : '#065f46',
+                      }}>
+                        {inM ? '🔴 Maintenance' : a.status === 'closed' ? '⛔ Closed' : '🟢 Active'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--ch-text-muted)', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                      <span>👥 Cap: {a.capacity}</span>
+                      <span>🕐 {a.operatingHours}</span>
+                      <span>🎰 {a.slots?.length || 0} slots</span>
+                      <span>📅 {bcount} bookings</span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button onClick={() => openEdit(a)} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 12 }}>
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(a)}
+                      style={{ ...btnSecondary, padding: '8px 12px', color: '#ef4444', borderColor: '#fca5a5', fontSize: 12 }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        {bookings.length === 0 ? (
-          <div style={{ padding:'32px', textAlign:'center', color:'var(--ch-text-muted)', fontSize:13 }}>No bookings yet</div>
-        ) : (
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead>
-                <tr style={{ background:'var(--ch-body-bg)' }}>
-                  {['Booking ID','Resident','Amenity','Date','Slot','Guests','Amount','Status'].map(h=>(
-                    <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'var(--ch-text-muted)', whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[...bookings].reverse().map(b => {
-                  const statusC = { confirmed:'#d1fae5', cancelled:'#fee2e2', completed:'#dbeafe' };
-                  const statusT = { confirmed:'#065f46', cancelled:'#991b1b', completed:'#1d4ed8' };
-                  return (
-                    <tr key={b.id} style={{ borderTop:'1px solid var(--ch-card-border)' }}>
-                      <td style={{ padding:'10px 14px', fontFamily:'monospace', fontSize:11, color:'var(--ch-text-muted)' }}>#{b.id}</td>
-                      <td style={{ padding:'10px 14px', fontWeight:700, color:'var(--ch-text-primary)' }}>{b.userName}</td>
-                      <td style={{ padding:'10px 14px', color:'var(--ch-text-muted)' }}>{b.amenityName}</td>
-                      <td style={{ padding:'10px 14px', color:'var(--ch-text-muted)', whiteSpace:'nowrap' }}>{b.date}</td>
-                      <td style={{ padding:'10px 14px', color:'var(--ch-text-muted)', whiteSpace:'nowrap' }}>{b.slotLabel}</td>
-                      <td style={{ padding:'10px 14px', textAlign:'center', color:'var(--ch-text-muted)' }}>{b.guests}</td>
-                      <td style={{ padding:'10px 14px', fontWeight:700, color:'#6366f1' }}>{b.amount===0?'Free':'₹'+b.amount}</td>
-                      <td style={{ padding:'10px 14px' }}>
-                        <span style={{ padding:'2px 9px', borderRadius:99, fontSize:11, fontWeight:800,
-                          background:statusC[b.status]||'#f3f4f6', color:statusT[b.status]||'#374151', textTransform:'capitalize' }}>
-                          {b.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      )}
+
+      {/* ── Bookings Tab ── */}
+      {adminTab === 'bookings' && (
+        <div style={{ background: 'var(--ch-card-bg)', border: '1px solid var(--ch-card-border)', borderRadius: 16 }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--ch-card-border)', fontSize: 14, fontWeight: 800, color: 'var(--ch-text-primary)' }}>
+            All Bookings ({bookings.length})
+          </div>
+          {bookings.length === 0 ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--ch-text-muted)', fontSize: 13 }}>No bookings yet</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--ch-body-bg)' }}>
+                    {['Booking ID', 'Resident', 'Amenity', 'Date', 'Slot', 'Guests', 'Amount', 'Status'].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: 'var(--ch-text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...bookings].reverse().map(b => {
+                    const statusC = { confirmed: '#d1fae5', cancelled: '#fee2e2', completed: '#dbeafe' };
+                    const statusT = { confirmed: '#065f46', cancelled: '#991b1b', completed: '#1d4ed8' };
+                    return (
+                      <tr key={b.id || b._id} style={{ borderTop: '1px solid var(--ch-card-border)' }}>
+                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 11, color: 'var(--ch-text-muted)' }}>#{(b.id || b._id || '').toString().slice(-8)}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--ch-text-primary)' }}>{b.userName || b.user?.name || '—'}</td>
+                        <td style={{ padding: '10px 14px', color: 'var(--ch-text-muted)' }}>{b.amenityName}</td>
+                        <td style={{ padding: '10px 14px', color: 'var(--ch-text-muted)', whiteSpace: 'nowrap' }}>{b.date}</td>
+                        <td style={{ padding: '10px 14px', color: 'var(--ch-text-muted)', whiteSpace: 'nowrap' }}>{b.slotLabel}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--ch-text-muted)' }}>{b.guests || b.guestCount}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#6366f1' }}>{(b.amount || b.totalAmount) === 0 ? 'Free' : `₹${b.amount || b.totalAmount}`}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{
+                            padding: '2px 9px', borderRadius: 99, fontSize: 11, fontWeight: 800,
+                            background: statusC[b.status] || '#f3f4f6', color: statusT[b.status] || '#374151', textTransform: 'capitalize',
+                          }}>{b.status}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Amenity Form (Add / Edit) ───────────────────────────── */
+const BLANK_AMENITY = {
+  name: '', description: '', category: 'Hall', emoji: '🏢',
+  capacity: 20, operatingHours: '9:00 AM – 10:00 PM', status: 'active',
+};
+const CATEGORIES_AM = ['Hall', 'Fitness', 'Sports', 'Kids', 'Entertainment', 'Accommodation', 'Other'];
+const EMOJI_OPTIONS  = ['🏢','🏋️','🏊','🏸','🎉','🎾','🛏️','🎮','🌳','🧸','🎯','🎱','🏓','🏀','⚽','🏐','🎭','📚','🛝','🧘'];
+
+function AmenityForm({ initial, onBack, onSaved }) {
+  const isEdit = !!initial;
+
+  const [form, setForm] = useState({
+    ...BLANK_AMENITY,
+    ...(initial ? {
+      name:           initial.name || '',
+      description:    initial.description || initial.desc || '',
+      category:       initial.category || 'Hall',
+      emoji:          initial.emoji || '🏢',
+      capacity:       initial.capacity || 20,
+      operatingHours: initial.operatingHours || '9:00 AM – 10:00 PM',
+      status:         initial.status || 'active',
+    } : {}),
+  });
+
+  // Slots management
+  const [slots, setSlots] = useState(
+    (initial?.slots || []).map((s, i) => ({
+      id: s.id || s._id || `s${i}`,
+      label: s.label,
+      price: s.price || 0,
+      guestCharge: s.guestCharge || 0,
+    }))
+  );
+  const [newSlot, setNewSlot] = useState({ label: '', price: 0, guestCharge: 0 });
+
+  // Maintenance windows
+  const [maintenance, setMaintenance] = useState(initial?.maintenance || []);
+  const [newMaint, setNewMaint]       = useState({ start: '', end: '', reason: '' });
+
+  // Images
+  const [imageFiles, setImageFiles] = useState([]);
+  const [existingImages]            = useState(initial?.images || (initial?.image ? [initial.image] : []));
+  const imgRef = useRef();
+
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState('');
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  /* ── Slot helpers ── */
+  const addSlot = () => {
+    if (!newSlot.label.trim()) return;
+    setSlots(prev => [...prev, { ...newSlot, id: `s${Date.now()}` }]);
+    setNewSlot({ label: '', price: 0, guestCharge: 0 });
+  };
+  const removeSlot = (id) => setSlots(prev => prev.filter(s => s.id !== id));
+
+  /* ── Maintenance helpers ── */
+  const addMaintenance = () => {
+    if (!newMaint.start || !newMaint.end) return;
+    setMaintenance(prev => [...prev, { ...newMaint }]);
+    setNewMaint({ start: '', end: '', reason: '' });
+  };
+  const removeMaintenance = (i) => setMaintenance(prev => prev.filter((_, idx) => idx !== i));
+
+  /* ── Submit ── */
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) { setError('Name is required.'); return; }
+    if (slots.length === 0) { setError('Add at least one booking slot.'); return; }
+    setSaving(true); setError('');
+    try {
+      const payload = {
+        ...form,
+        capacity: Number(form.capacity),
+        slots: JSON.stringify(slots.map(({ id, ...rest }) => rest)),
+        maintenance: JSON.stringify(maintenance),
+      };
+
+      let savedAmenity;
+      if (isEdit && mongoose_id_valid(initial._id)) {
+        const res = await amenityService.updateAmenity(initial._id, payload);
+        savedAmenity = res.data.amenity;
+      } else {
+        const res = await amenityService.createAmenity(payload);
+        savedAmenity = res.data.amenity;
+      }
+
+      // Upload new images
+      if (imageFiles.length > 0 && savedAmenity?._id) {
+        await amenityService.uploadImages(savedAmenity._id, imageFiles.map(f => f.file));
+      }
+
+      onSaved();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Save failed. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addImageFiles = (files) => {
+    const valid = [...files].filter(f => f.type.startsWith('image/')).slice(0, 10 - imageFiles.length);
+    valid.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => setImageFiles(prev => [...prev, { file, preview: e.target.result }]);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  return (
+    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      <button style={{ ...btnSecondary, marginBottom: 16 }} onClick={onBack}>
+        <ChevronLeft size={16} /> Back to Admin
+      </button>
+      <div style={{ background: 'var(--ch-card-bg)', border: '1px solid var(--ch-card-border)', borderRadius: 20, padding: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--ch-text-primary)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 24 }}>{form.emoji}</span>
+          {isEdit ? `Edit: ${initial.name}` : 'Add New Amenity / Club'}
+        </h2>
+
+        {error && (
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#991b1b' }}>
+            {error}
           </div>
         )}
+
+        <form onSubmit={handleSubmit}>
+
+          {/* ── Section: Basic Info ── */}
+          <SectionLabel>📋 Basic Information</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+            <div style={{ gridColumn: '1/-1' }}>
+              <FieldLabel>Amenity Name *</FieldLabel>
+              <input style={inp} required placeholder="e.g. Badminton Court" value={form.name} onChange={e => set('name', e.target.value)} />
+            </div>
+            <div>
+              <FieldLabel>Category *</FieldLabel>
+              <select style={inp} value={form.category} onChange={e => set('category', e.target.value)}>
+                {CATEGORIES_AM.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <FieldLabel>Emoji Icon</FieldLabel>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {EMOJI_OPTIONS.map(em => (
+                  <button key={em} type="button" onClick={() => set('emoji', em)} style={{
+                    width: 36, height: 36, borderRadius: 8, border: `2px solid ${form.emoji === em ? '#6366f1' : 'var(--ch-card-border)'}`,
+                    background: form.emoji === em ? '#ede9fe' : 'var(--ch-body-bg)',
+                    cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{em}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ gridColumn: '1/-1' }}>
+              <FieldLabel>Description</FieldLabel>
+              <textarea style={{ ...inp, minHeight: 80, resize: 'vertical' }}
+                placeholder="Describe this amenity — facilities, rules, highlights…"
+                value={form.description} onChange={e => set('description', e.target.value)} />
+            </div>
+            <div>
+              <FieldLabel>Capacity (persons)</FieldLabel>
+              <input style={inp} type="number" min={1} value={form.capacity} onChange={e => set('capacity', e.target.value)} />
+            </div>
+            <div>
+              <FieldLabel>Operating Hours</FieldLabel>
+              <input style={inp} placeholder="e.g. 6:00 AM – 10:00 PM" value={form.operatingHours} onChange={e => set('operatingHours', e.target.value)} />
+            </div>
+            <div>
+              <FieldLabel>Status</FieldLabel>
+              <select style={inp} value={form.status} onChange={e => set('status', e.target.value)}>
+                <option value="active">🟢 Active</option>
+                <option value="maintenance">🔴 Under Maintenance</option>
+                <option value="closed">⛔ Closed</option>
+              </select>
+            </div>
+          </div>
+
+          {/* ── Section: Photos ── */}
+          <SectionLabel>📷 Photos</SectionLabel>
+          <div style={{ marginBottom: 20 }}>
+            <div
+              onClick={() => imageFiles.length < 10 && imgRef.current.click()}
+              style={{
+                border: '2px dashed var(--ch-card-border)', borderRadius: 12, padding: '16px',
+                textAlign: 'center', cursor: imageFiles.length < 10 ? 'pointer' : 'default',
+                background: 'var(--ch-body-bg)',
+              }}
+            >
+              <Camera size={22} style={{ opacity: 0.35, margin: '0 auto 6px', display: 'block' }} />
+              <p style={{ fontSize: 12, color: 'var(--ch-text-muted)', margin: 0 }}>
+                {imageFiles.length >= 10 ? 'Max 10 photos reached'
+                  : <><span style={{ color: '#6366f1', fontWeight: 700 }}>Click to upload</span> photos ({imageFiles.length + existingImages.length}/10)</>}
+              </p>
+              <input ref={imgRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
+                onChange={e => addImageFiles(e.target.files)} />
+            </div>
+            {(existingImages.length > 0 || imageFiles.length > 0) && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                {existingImages.map((url, i) => (
+                  <div key={`ex${i}`} style={{ position: 'relative' }}>
+                    <img src={url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: '2px solid #6366f1', opacity: 0.85 }} />
+                    <span style={{ position: 'absolute', top: 2, left: 2, fontSize: 8, background: '#6366f1', color: '#fff', borderRadius: 4, padding: '1px 4px', fontWeight: 800 }}>Saved</span>
+                  </div>
+                ))}
+                {imageFiles.map((img, i) => (
+                  <div key={`nw${i}`} style={{ position: 'relative' }}>
+                    <img src={img.preview} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: '2px solid var(--ch-card-border)' }} />
+                    {i === 0 && existingImages.length === 0 && (
+                      <span style={{ position: 'absolute', bottom: 2, left: 2, fontSize: 8, background: '#6366f1', color: '#fff', borderRadius: 4, padding: '1px 4px', fontWeight: 800 }}>Cover</span>
+                    )}
+                    <button type="button" onClick={() => setImageFiles(prev => prev.filter((_, idx) => idx !== i))}
+                      style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#ef4444', border: '2px solid #fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                      <XCircle size={12} color="#fff" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Section: Booking Slots ── */}
+          <SectionLabel>🕐 Booking Slots *</SectionLabel>
+          <div style={{ marginBottom: 20 }}>
+            {slots.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {slots.map((s, i) => (
+                  <div key={s.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                    background: 'var(--ch-body-bg)', borderRadius: 10, border: '1px solid var(--ch-card-border)', flexWrap: 'wrap',
+                  }}>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--ch-text-primary)', minWidth: 140 }}>🕐 {s.label}</span>
+                    <span style={{ fontSize: 12, color: '#6366f1', fontWeight: 700 }}>₹{s.price}</span>
+                    {s.guestCharge > 0 && <span style={{ fontSize: 11, color: 'var(--ch-text-muted)' }}>+₹{s.guestCharge}/guest</span>}
+                    <button type="button" onClick={() => removeSlot(s.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 0, display: 'flex', alignItems: 'center' }}>
+                      <XCircle size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Add slot row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
+              <div>
+                <FieldLabel>Time Label</FieldLabel>
+                <input style={inp} placeholder="e.g. 6:00 AM – 8:00 AM" value={newSlot.label}
+                  onChange={e => setNewSlot(s => ({ ...s, label: e.target.value }))} />
+              </div>
+              <div>
+                <FieldLabel>Price (₹)</FieldLabel>
+                <input style={inp} type="number" min={0} value={newSlot.price}
+                  onChange={e => setNewSlot(s => ({ ...s, price: Number(e.target.value) }))} />
+              </div>
+              <div>
+                <FieldLabel>Guest Charge</FieldLabel>
+                <input style={inp} type="number" min={0} value={newSlot.guestCharge}
+                  onChange={e => setNewSlot(s => ({ ...s, guestCharge: Number(e.target.value) }))} />
+              </div>
+              <button type="button" onClick={addSlot} style={{ ...btnPrimary, padding: '9px 14px', alignSelf: 'flex-end' }}>
+                <Plus size={15} />
+              </button>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--ch-text-muted)', marginTop: 6 }}>
+              Set price to 0 for free slots. Guest charge is per additional guest beyond the booker.
+            </p>
+          </div>
+
+          {/* ── Section: Maintenance Windows ── */}
+          <SectionLabel>🔧 Maintenance Schedule <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ch-text-muted)' }}>(optional)</span></SectionLabel>
+          <div style={{ marginBottom: 24 }}>
+            {maintenance.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {maintenance.map((m, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                    background: '#fef3c7', borderRadius: 10, border: '1px solid #fde68a', flexWrap: 'wrap',
+                  }}>
+                    <AlertTriangle size={14} color="#92400e" />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#92400e', flex: 1 }}>
+                      {m.start} → {m.end}{m.reason ? ` — ${m.reason}` : ''}
+                    </span>
+                    <button type="button" onClick={() => removeMaintenance(i)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 0 }}>
+                      <XCircle size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 8, alignItems: 'end' }}>
+              <div>
+                <FieldLabel>Start Date</FieldLabel>
+                <input style={inp} type="date" value={newMaint.start}
+                  onChange={e => setNewMaint(m => ({ ...m, start: e.target.value }))} />
+              </div>
+              <div>
+                <FieldLabel>End Date</FieldLabel>
+                <input style={inp} type="date" value={newMaint.end}
+                  onChange={e => setNewMaint(m => ({ ...m, end: e.target.value }))} />
+              </div>
+              <div>
+                <FieldLabel>Reason</FieldLabel>
+                <input style={inp} placeholder="e.g. Annual equipment servicing" value={newMaint.reason}
+                  onChange={e => setNewMaint(m => ({ ...m, reason: e.target.value }))} />
+              </div>
+              <button type="button" onClick={addMaintenance} style={{ ...btnSecondary, padding: '9px 14px', alignSelf: 'flex-end' }}>
+                <Plus size={15} />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Submit ── */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" style={{ ...btnSecondary, flex: 1, justifyContent: 'center' }} onClick={onBack}>Cancel</button>
+            <button type="submit" disabled={saving} style={{ ...btnPrimary, flex: 2, justifyContent: 'center', padding: '13px' }}>
+              {saving
+                ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Saving…</>
+                : <><CheckCircle size={15} /> {isEdit ? 'Save Changes' : 'Create Amenity'}</>}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
+}
+
+/* ── Small helpers ── */
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 800, color: 'var(--ch-text-muted)',
+      textTransform: 'uppercase', letterSpacing: '0.8px',
+      marginBottom: 10, paddingBottom: 6,
+      borderBottom: '1px solid var(--ch-card-border)',
+    }}>{children}</div>
+  );
+}
+function FieldLabel({ children }) {
+  return <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--ch-text-muted)', display: 'block', marginBottom: 5 }}>{children}</label>;
+}
+function mongoose_id_valid(id) {
+  return id && /^[a-f\d]{24}$/i.test(String(id));
 }
