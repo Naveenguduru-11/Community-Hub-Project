@@ -53,6 +53,7 @@ exports.getProposals = async (req, res, next) => {
 
       const proposals = await Proposal.find(filter)
         .populate('createdBy', 'name role avatar')
+        .populate('opinions.user', 'name role avatar')
         .sort({ createdAt: -1 });
 
       return res.json({ success: true, count: proposals.length, proposals });
@@ -73,6 +74,7 @@ exports.getProposalById = async (req, res, next) => {
     if (isConnected && mongoose.Types.ObjectId.isValid(req.params.id)) {
       const proposal = await Proposal.findById(req.params.id)
         .populate('createdBy', 'name role avatar')
+        .populate('opinions.user', 'name role avatar')
         .populate('result.closedBy', 'name role');
       if (!proposal) return res.status(404).json({ success: false, message: 'Proposal not found' });
       return res.json({ success: true, proposal });
@@ -90,11 +92,11 @@ exports.createProposal = async (req, res, next) => {
     const {
       title, description, category,
       votingDeadline, quorumPercent, passThresholdPercent,
-      options, status
+      options, status, isYesNo
     } = req.body;
 
-    if (!title || !description || !votingDeadline) {
-      return res.status(400).json({ success: false, message: 'Title, description and votingDeadline are required' });
+    if (!title || !description) {
+      return res.status(400).json({ success: false, message: 'Title and description are required' });
     }
 
     const isConnected = mongoose.connection.readyState === 1;
@@ -108,7 +110,16 @@ exports.createProposal = async (req, res, next) => {
       });
     }
 
-    const proposalStatus = status === 'active' ? 'active' : 'draft';
+    // Default to active so voting is immediately enabled
+    const proposalStatus = status ? status : 'active';
+    const deadline = votingDeadline ? new Date(votingDeadline) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    let finalOptions;
+    if (options && Array.isArray(options) && options.length > 0) {
+      finalOptions = options.map(o => (typeof o === 'string' ? { label: o, votes: [] } : { label: o.label || 'Option', votes: [] }));
+    } else {
+      finalOptions = [{ label: 'Yes', votes: [] }, { label: 'No', votes: [] }];
+    }
 
     const proposalData = {
       title,
@@ -117,12 +128,11 @@ exports.createProposal = async (req, res, next) => {
       status: proposalStatus,
       createdBy: req.user._id || req.user.id,
       community: req.user.community,
-      votingDeadline: new Date(votingDeadline),
+      votingDeadline: deadline,
       quorumPercent: quorumPercent || 50,
       passThresholdPercent: passThresholdPercent || 50,
-      options: options && options.length > 0
-        ? options.map(o => ({ label: o, votes: [] }))
-        : [{ label: 'Yes', votes: [] }, { label: 'No', votes: [] }, { label: 'Abstain', votes: [] }],
+      options: finalOptions,
+      opinions: [],
       totalEligibleVoters: eligibleCount || 10
     };
 
@@ -150,11 +160,8 @@ exports.createProposal = async (req, res, next) => {
 // ─── POST /api/proposals/:id/vote ────────────────────────────────────────────
 exports.castVote = async (req, res, next) => {
   try {
-    const { optionIndex } = req.body;
-    if (optionIndex === undefined || optionIndex === null) {
-      return res.status(400).json({ success: false, message: 'optionIndex is required' });
-    }
-
+    let { optionIndex, vote, message, reason } = req.body;
+    const voterMessage = (message || reason || '').toString().trim();
     const isConnected = mongoose.connection.readyState === 1;
     const userId = req.user._id?.toString() || req.user.id?.toString();
 
@@ -163,8 +170,26 @@ exports.castVote = async (req, res, next) => {
       if (!proposal) return res.status(404).json({ success: false, message: 'Proposal not found' });
       if (proposal.status !== 'active') return res.status(400).json({ success: false, message: 'Voting is not open for this proposal' });
       if (new Date() > proposal.votingDeadline) return res.status(400).json({ success: false, message: 'Voting deadline has passed' });
-      if (!proposal.eligibleRoles.includes(req.user.role)) return res.status(403).json({ success: false, message: 'You are not eligible to vote on this proposal' });
-      if (optionIndex < 0 || optionIndex >= proposal.options.length) return res.status(400).json({ success: false, message: 'Invalid option' });
+      if (proposal.eligibleRoles && !proposal.eligibleRoles.includes(req.user.role)) {
+        return res.status(403).json({ success: false, message: 'You are not eligible to vote on this proposal' });
+      }
+
+      // Map string vote ('YES', 'NO', 'ABSTAIN') to optionIndex if optionIndex not provided
+      if (optionIndex === undefined || optionIndex === null) {
+        if (vote) {
+          const voteStr = vote.toString().trim().toLowerCase();
+          optionIndex = proposal.options.findIndex(o => o.label.toLowerCase() === voteStr);
+          if (optionIndex === -1) {
+            if (voteStr === 'yes' || voteStr === 'for') optionIndex = 0;
+            else if (voteStr === 'no' || voteStr === 'against') optionIndex = 1;
+            else if (voteStr === 'abstain') optionIndex = 2;
+          }
+        }
+      }
+
+      if (optionIndex === undefined || optionIndex === null || optionIndex < 0 || optionIndex >= proposal.options.length) {
+        return res.status(400).json({ success: false, message: 'Invalid vote option' });
+      }
 
       // Check if already voted
       let alreadyVotedIndex = -1;
@@ -181,18 +206,53 @@ exports.castVote = async (req, res, next) => {
 
       // Add new vote
       proposal.options[optionIndex].votes.push(req.user._id);
+
+      // Record voter opinion / custom message
+      if (!proposal.opinions) proposal.opinions = [];
+      const existingOpinionIdx = proposal.opinions.findIndex(o => (o.user?._id || o.user)?.toString() === userId);
+      const chosenLabel = proposal.options[optionIndex].label;
+      const opinionEntry = {
+        user: req.user._id,
+        userName: req.user.name || 'Resident',
+        vote: chosenLabel,
+        message: voterMessage,
+        createdAt: new Date()
+      };
+
+      if (existingOpinionIdx >= 0) {
+        proposal.opinions[existingOpinionIdx] = opinionEntry;
+      } else {
+        proposal.opinions.push(opinionEntry);
+      }
+
       await proposal.save();
 
       await logAudit(action, req.user, proposal._id, 'Proposal', proposal.community,
-        { proposalTitle: proposal.title, option: proposal.options[optionIndex].label, previousOption: alreadyVotedIndex >= 0 ? proposal.options[alreadyVotedIndex]?.label : null }, req);
+        { proposalTitle: proposal.title, option: chosenLabel, message: voterMessage }, req);
 
-      const updated = await Proposal.findById(proposal._id).populate('createdBy', 'name role avatar');
+      const updated = await Proposal.findById(proposal._id)
+        .populate('createdBy', 'name role avatar')
+        .populate('opinions.user', 'name role avatar');
       return res.json({ success: true, proposal: updated, action });
     } else {
       // Memory fallback
       const proposal = memoryProposals.find(p => p._id === req.params.id);
       if (!proposal) return res.status(404).json({ success: false, message: 'Proposal not found' });
       if (proposal.status !== 'active') return res.status(400).json({ success: false, message: 'Voting is not open' });
+
+      if (optionIndex === undefined || optionIndex === null) {
+        if (vote) {
+          const voteStr = vote.toString().trim().toLowerCase();
+          optionIndex = proposal.options.findIndex(o => o.label.toLowerCase() === voteStr);
+          if (optionIndex === -1) {
+            if (voteStr === 'yes' || voteStr === 'for') optionIndex = 0;
+            else if (voteStr === 'no' || voteStr === 'against') optionIndex = 1;
+            else optionIndex = 0;
+          }
+        }
+      }
+
+      if (optionIndex < 0 || optionIndex >= proposal.options.length) optionIndex = 0;
 
       let alreadyVotedIndex = -1;
       proposal.options.forEach((opt, i) => {
@@ -205,8 +265,17 @@ exports.castVote = async (req, res, next) => {
       }
       proposal.options[optionIndex].votes.push(userId);
 
+      if (!proposal.opinions) proposal.opinions = [];
+      proposal.opinions.push({
+        user: userId,
+        userName: req.user.name || 'Resident',
+        vote: proposal.options[optionIndex].label,
+        message: voterMessage,
+        createdAt: new Date()
+      });
+
       await logAudit(action, req.user, proposal._id, 'Proposal', proposal.community,
-        { proposalTitle: proposal.title, option: proposal.options[optionIndex].label }, req);
+        { proposalTitle: proposal.title, option: proposal.options[optionIndex].label, message: voterMessage }, req);
 
       return res.json({ success: true, proposal, action });
     }

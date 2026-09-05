@@ -92,18 +92,37 @@ exports.createListing = async (req, res, next) => {
 
     const isConnected = mongoose.connection.readyState === 1;
 
+    const resolvedVilla = villaNumber || req.body.villa || (req.user?.villa ? `Villa ${req.user.villa}` : 'Unit 101');
+    const resolvedBhk = bhk || (req.body.bedrooms ? `${req.body.bedrooms} BHK` : '3 BHK');
+    const resolvedPropType = (['APARTMENT', 'VILLA', 'DUPLEX', 'PENTHOUSE', 'STUDIO'].includes((req.body.propertyType || type || '').toUpperCase()))
+        ? (req.body.propertyType || type).toUpperCase()
+        : 'APARTMENT';
+    const resolvedListingType = (listingType || (type === 'RENT' || type === 'SALE' ? type : 'SALE')).toUpperCase();
+    const resolvedTitle = (title && title.trim().length > 0)
+        ? title.trim()
+        : `${resolvedBhk} ${resolvedPropType} - ${resolvedVilla}`;
+
     const data = {
-      title, description: description || '',
-      villaNumber, block: block || '',
-      type: type || 'APARTMENT', bhk: bhk || '3 BHK',
-      area: Number(area) || 0, floor: floor || '', facing: facing || '',
-      price: Number(price), priceNegotiable: !!priceNegotiable,
+      title: resolvedTitle,
+      description: description || '',
+      villaNumber: resolvedVilla,
+      block: block || '',
+      type: resolvedPropType,
+      bhk: resolvedBhk,
+      area: Number(area) || 0,
+      floor: floor || '',
+      facing: facing || '',
+      price: Number(price) || 0,
+      priceNegotiable: !!priceNegotiable,
       maintenanceCharge: Number(maintenanceCharge) || 0,
-      status: status || 'AVAILABLE', listingType: listingType || 'SALE',
-      amenities: amenities || [], highlights: highlights || [],
+      status: status || 'AVAILABLE',
+      listingType: resolvedListingType === 'RENT' ? 'RENT' : 'SALE',
+      amenities: amenities || [],
+      highlights: highlights || [],
       images: images || [],
       contactName: contactName || req.user?.name || '',
-      contactPhone: contactPhone || '', contactEmail: contactEmail || req.user?.email || '',
+      contactPhone: contactPhone || req.body.sellerPhone || req.user?.phone || '',
+      contactEmail: contactEmail || req.user?.email || '',
       visibleToResidents: visibleToResidents !== false,
       community: community || req.user?.community,
       postedBy: req.user?._id

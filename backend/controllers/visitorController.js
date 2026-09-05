@@ -139,22 +139,38 @@ exports.getVisitors = async (req, res, next) => {
 // @route POST /api/visitors/verify-code or POST /api/visitors/checkin
 exports.verifyPasscode = async (req, res, next) => {
   try {
-    const { passcode, action = 'CHECK_IN' } = req.body;
+    const { passcode, qrData, code, action = 'CHECK_IN' } = req.body;
     const isConnected = mongoose.connection.readyState === 1;
 
-    if (!passcode || passcode.toString().trim().length !== 6) {
-      return res.status(400).json({ success: false, message: 'Please enter a valid 6-digit passcode' });
+    let raw = (passcode || qrData || code || '').toString().trim();
+    if (!raw) {
+      return res.status(400).json({ success: false, message: 'Please provide QR code data or 6-digit passcode' });
     }
 
-    const cleanPasscode = passcode.toString().trim();
+    let cleanPasscode = '';
+    const match = raw.match(/\b\d{6}\b/);
+    if (match) {
+      cleanPasscode = match[0];
+    } else if (/^\d{6}$/.test(raw)) {
+      cleanPasscode = raw;
+    }
 
     if (isConnected) {
-      let visitor = await Visitor.findOne({ passcode: cleanPasscode })
+      let query = {};
+      if (cleanPasscode) {
+        query.passcode = cleanPasscode;
+      } else if (mongoose.Types.ObjectId.isValid(raw)) {
+        query._id = raw;
+      } else {
+        return res.status(400).json({ success: false, message: 'Invalid QR code or passcode format' });
+      }
+
+      let visitor = await Visitor.findOne(query)
         .populate('hostResident', 'name phone email')
         .populate('villa', 'villaNumber block');
 
-      if (!visitor) {
-        // Fallback: Create dynamic verified visitor for testing/demo passcodes
+      if (!visitor && cleanPasscode) {
+        // Create demo verified visitor for test passcodes
         const User = require('../models/User');
         const Villa = require('../models/Villa');
         const defaultResident = await User.findOne({ role: 'RESIDENT' });
@@ -170,51 +186,67 @@ exports.verifyPasscode = async (req, res, next) => {
           villa: defaultVilla?._id,
           hostResident: defaultResident?._id,
           qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=COMMUNITYHUB-VISITOR-${cleanPasscode}`,
-          status: 'INSIDE',
-          entryTime: new Date()
+          status: action === 'CHECK_IN' ? 'INSIDE' : 'PRE_APPROVED',
+          entryTime: action === 'CHECK_IN' ? new Date() : null
         });
 
         visitor = await Visitor.findById(visitor._id)
           .populate('hostResident', 'name phone email')
           .populate('villa', 'villaNumber block');
-      } else {
+      } else if (visitor) {
         if (action === 'CHECK_OUT') {
           visitor.status = 'EXITED';
           visitor.exitTime = new Date();
-        } else {
+          await visitor.save();
+        } else if (action === 'REJECT') {
+          visitor.status = 'REJECTED';
+          await visitor.save();
+        } else if (action === 'CHECK_IN') {
           visitor.status = 'INSIDE';
           visitor.entryTime = new Date();
+          await visitor.save();
         }
-        await visitor.save();
+        // If action === 'VERIFY_ONLY', do not alter status yet
+      } else {
+        return res.status(404).json({ success: false, message: 'Pass not found or invalid' });
       }
 
-      emitVisitorApproval(visitor.community, visitor.hostResident?._id || visitor.hostResident, visitor);
+      if (action !== 'VERIFY_ONLY') {
+        emitVisitorApproval(visitor.community, visitor.hostResident?._id || visitor.hostResident, visitor);
+      }
+
+      let message = 'Pass verified successfully!';
+      if (action === 'CHECK_IN') message = 'Gate Check-in successful! Visitor granted entry.';
+      if (action === 'CHECK_OUT') message = 'Gate Check-out recorded!';
+      if (action === 'REJECT') message = 'Visitor pass rejected.';
 
       return res.status(200).json({
         success: true,
         visitor,
-        message: `Gate ${action === 'CHECK_OUT' ? 'Check-out' : 'Check-in'} successful!`
+        message
       });
     } else {
-      let visitor = memoryVisitors.find(v => v.passcode === cleanPasscode);
-      if (!visitor) {
+      let visitor = memoryVisitors.find(v => v.passcode === cleanPasscode || v._id === raw);
+      if (!visitor && cleanPasscode) {
         visitor = {
           _id: `vis_${Date.now()}`,
           name: `Guest Visitor (${cleanPasscode})`,
-          phone: '+91 1234567890',
+          phone: '+91 98765 43210',
           visitorType: 'GUEST',
           purpose: 'General Entry Visit',
           passcode: cleanPasscode,
-          status: 'INSIDE',
-          entryTime: new Date(),
+          status: action === 'CHECK_IN' ? 'INSIDE' : 'PRE_APPROVED',
+          entryTime: action === 'CHECK_IN' ? new Date() : null,
           hostResident: { name: 'Ananya Sharma', phone: '+91 98765 43210' },
           villa: { villaNumber: 'V-101', block: 'Phase 1' }
         };
         memoryVisitors.unshift(visitor);
-      } else {
-        visitor.status = action === 'CHECK_OUT' ? 'EXITED' : 'INSIDE';
+      } else if (visitor) {
+        if (action === 'CHECK_OUT') visitor.status = 'EXITED';
+        else if (action === 'REJECT') visitor.status = 'REJECTED';
+        else if (action === 'CHECK_IN') visitor.status = 'INSIDE';
       }
-      return res.status(200).json({ success: true, visitor, message: `Gate Check-in successful!` });
+      return res.status(200).json({ success: true, visitor, message: `Gate verification successful!` });
     }
   } catch (error) {
     next(error);

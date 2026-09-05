@@ -327,16 +327,21 @@ exports.getPayments = async (req, res, next) => {
   try {
     const isConnected = mongoose.connection.readyState === 1;
 
-    // Residents: only see bills explicitly issued by admin (isAdminIssued:true)
+    // Residents: see bills matching their user ID, villa ID, or community broad bills
     // Admins: see all community bills
     let filter = {};
     if (req.user?.role === 'RESIDENT') {
-      const orConditions = [{ resident: req.user._id }];
+      const orConditions = [
+        { resident: req.user._id },
+        { 'resident._id': req.user._id },
+      ];
       if (req.user.villa && mongoose.Types.ObjectId.isValid(req.user.villa)) {
         orConditions.push({ villa: req.user.villa });
       }
-      // KEY FIX: only return bills that admin explicitly issued
-      filter = { $and: [{ $or: orConditions }, { isAdminIssued: true }] };
+      if (req.user.community && mongoose.Types.ObjectId.isValid(req.user.community)) {
+        orConditions.push({ community: req.user.community, resident: null });
+      }
+      filter = { $or: orConditions };
     } else if (req.user?.community && mongoose.Types.ObjectId.isValid(req.user.community)) {
       filter = { community: req.user.community };
     }
@@ -352,15 +357,14 @@ exports.getPayments = async (req, res, next) => {
       );
       return res.status(200).json({ success: true, count: uniquePayments.length, payments: uniquePayments });
     } else {
-      // Memory fallback — only show isAdminIssued bills
+      // Memory fallback — show matching bills
       let filtered = memoryPayments;
       if (req.user?.role === 'RESIDENT') {
         filtered = memoryPayments.filter(p => {
-          if (!p.isAdminIssued) return false;
           const residentId = p.resident?._id?.toString() || p.resident?.toString();
           const villaId = p.villa?._id?.toString() || p.villa?.toString();
           const userVillaId = req.user.villa?._id?.toString() || req.user.villa?.toString();
-          return residentId === req.user._id?.toString() || (userVillaId && villaId === userVillaId);
+          return !residentId || residentId === req.user._id?.toString() || (userVillaId && villaId === userVillaId);
         });
       }
       const uniquePayments = Array.from(

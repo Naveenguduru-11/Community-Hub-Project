@@ -49,6 +49,15 @@ const proposalSchema = new mongoose.Schema({
     url:  { type: String },   // Cloudinary URL or base64
     name: { type: String, default: '' },
     type: { type: String, default: 'image' }  // 'image' | 'document'
+  }],
+
+  // Resident Opinions and Custom Messages on Proposal
+  opinions: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    userName: { type: String, default: 'Resident' },
+    vote: { type: String, default: 'Yes' },
+    message: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now }
   }]
 }, { timestamps: true });
 

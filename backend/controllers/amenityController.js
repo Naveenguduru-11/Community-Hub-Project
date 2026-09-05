@@ -246,19 +246,63 @@ exports.createBooking = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-/* ── PUT /api/amenities/bookings/:bookingId/status ───────────────────── */
+/* ── PUT /api/amenities/bookings/:bookingId/status ─────────────────── */
+// Admin only: change any booking to any status
 exports.updateBookingStatus = async (req, res, next) => {
   try {
     const { bookingId } = req.params;
     const { status } = req.body;
     const isConnected = mongoose.connection.readyState === 1;
 
-    if (isConnected && mongoose.Types.ObjectId.isValid(bookingId)) {
-      const booking = await AmenityBooking.findByIdAndUpdate(
-        bookingId, { status }, { new: true }
-      ).populate('user', 'name email');
-      return res.json({ success: true, booking });
+    if (!isConnected) {
+      return res.status(503).json({ success: false, message: 'Database not connected' });
     }
-    return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({ success: false, message: 'Invalid booking ID' });
+    }
+
+    const booking = await AmenityBooking.findByIdAndUpdate(
+      bookingId, { status }, { new: true }
+    ).populate('user', 'name email');
+
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    return res.json({ success: true, booking });
+  } catch (err) { next(err); }
+};
+
+/* ── PUT /api/amenities/bookings/:bookingId/cancel ────────────────── */
+// Resident: cancel their OWN booking only
+exports.cancelBooking = async (req, res, next) => {
+  try {
+    const { bookingId } = req.params;
+    const isConnected = mongoose.connection.readyState === 1;
+
+    if (!isConnected) {
+      return res.status(503).json({ success: false, message: 'Database not connected' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({ success: false, message: 'Invalid booking ID' });
+    }
+
+    const booking = await AmenityBooking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    // Check ownership — only the booking owner or an admin can cancel
+    const isAdmin = ['SUPER_ADMIN', 'COMMUNITY_ADMIN'].includes(req.user?.role);
+    const isOwner = booking.user.toString() === req.user._id.toString();
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'You can only cancel your own bookings' });
+    }
+
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'Booking is already cancelled' });
+    }
+
+    booking.status = 'cancelled';
+    await booking.save();
+
+    return res.json({ success: true, message: 'Booking cancelled successfully', booking });
   } catch (err) { next(err); }
 };

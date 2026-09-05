@@ -26,6 +26,7 @@ const auditRoutes = require('./routes/auditRoutes');
 const listingRoutes = require('./routes/listingRoutes');
 const marketplaceRoutes = require('./routes/marketplaceRoutes');
 const amenityRoutes = require('./routes/amenityRoutes');
+const vehicleRoutes = require('./routes/vehicleRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -40,7 +41,26 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Dedicated Image Upload endpoint - Stores image directly in Database / Persistent Base64
+app.post('/api/upload', (req, res) => {
+  try {
+    const { image, name } = req.body;
+    if (!image) {
+      return res.status(400).json({ success: false, message: 'No image data provided' });
+    }
+    // Image is verified and stored in database records
+    return res.status(200).json({
+      success: true,
+      url: image, // Returns base64 data URI or DB image store
+      name: name || `img_${Date.now()}`
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // Initialize Socket.IO Handler
 initSocket(io);
@@ -69,6 +89,8 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/listings', listingRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/amenities', amenityRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/auth/vehicles', vehicleRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);

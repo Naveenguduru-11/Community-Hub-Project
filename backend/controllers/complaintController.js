@@ -63,6 +63,37 @@ exports.createComplaint = async (req, res, next) => {
   }
 };
 
+// @desc Update Complaint Ticket Details (Resident / Admin)
+// @route PUT /api/complaints/:id
+exports.updateComplaint = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, description, category, priority } = req.body;
+    const isConnected = mongoose.connection.readyState === 1;
+
+    const updateFields = {};
+    if (title) updateFields.title = title;
+    if (description) updateFields.description = description;
+    if (category) updateFields.category = category;
+    if (priority) updateFields.priority = priority;
+
+    if (isConnected && mongoose.Types.ObjectId.isValid(id)) {
+      const complaint = await Complaint.findByIdAndUpdate(id, updateFields, { new: true })
+        .populate('raisedBy', 'name email phone')
+        .populate('villa', 'villaNumber block');
+      return res.status(200).json({ success: true, complaint });
+    } else {
+      const cmp = memoryComplaints.find(c => c._id === id);
+      if (cmp) {
+        Object.assign(cmp, updateFields);
+      }
+      return res.status(200).json({ success: true, complaint: cmp });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc Delete Complaint Ticket
 // @route DELETE /api/complaints/:id
 exports.deleteComplaint = async (req, res, next) => {

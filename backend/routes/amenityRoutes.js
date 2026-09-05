@@ -3,7 +3,7 @@ const router = express.Router();
 const {
   getAmenities, getAmenity, createAmenity, updateAmenity, deleteAmenity,
   uploadAmenityImages,
-  getBookings, getMyBookings, createBooking, updateBookingStatus
+  getBookings, getMyBookings, createBooking, updateBookingStatus, cancelBooking
 } = require('../controllers/amenityController');
 const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
@@ -35,6 +35,11 @@ router.post('/:id/images',
 // ── Booking Routes ───────────────────────────────────────────────────
 router.get('/:id/bookings',           protect, getBookings);
 router.post('/:id/bookings',          protect, createBooking);
+
+// Any authenticated resident can cancel their OWN booking
+router.put('/bookings/:bookingId/cancel', protect, cancelBooking);
+
+// Admins can change any booking status
 router.put('/bookings/:bookingId/status',
   protect, authorize('SUPER_ADMIN', 'COMMUNITY_ADMIN'),
   updateBookingStatus);

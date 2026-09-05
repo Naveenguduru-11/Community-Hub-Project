@@ -26,10 +26,10 @@ router.post('/:id/vote', authorize('RESIDENT', 'COMMUNITY_ADMIN'), castVote);
 // Upload photos/attachments to a proposal
 router.post('/:id/attachments', upload.array('attachments', 5), uploadAttachments);
 
-// Admin+ can create, modify status, delete
-router.post('/', authorize('COMMUNITY_ADMIN'), createProposal);
-router.put('/:id/status', authorize('COMMUNITY_ADMIN'), updateProposalStatus);
-router.delete('/:id', authorize('COMMUNITY_ADMIN'), deleteProposal);
+// Admin+ and Residents can create proposals
+router.post('/', authorize('COMMUNITY_ADMIN', 'SUPER_ADMIN', 'RESIDENT'), createProposal);
+router.put('/:id/status', authorize('COMMUNITY_ADMIN', 'SUPER_ADMIN'), updateProposalStatus);
+router.delete('/:id', authorize('COMMUNITY_ADMIN', 'SUPER_ADMIN'), deleteProposal);
 
 module.exports = router;
 

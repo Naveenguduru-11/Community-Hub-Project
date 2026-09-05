@@ -7,8 +7,8 @@ const vehicleSchema = new mongoose.Schema({
   color: { type: String, default: '' },
   parkingSlot: { type: String, default: '' },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  villa: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa', required: true },
-  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: true }
+  villa: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa' },
+  community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Vehicle', vehicleSchema);

@@ -46,31 +46,54 @@ exports.getItem = async (req, res, next) => {
 exports.createItem = async (req, res, next) => {
   try {
     const { title, description, category, price, condition, location,
-            contactPhone, contactEmail, images: b64Images } = req.body;
+            contactPhone, contactEmail, images: b64Images, image } = req.body;
 
     const isConnected = mongoose.connection.readyState === 1;
 
-    // Handle file uploads if multipart
-    let imageUrls = b64Images || [];
+    // Handle file uploads if multipart or base64 images
+    let imageUrls = [];
+    if (Array.isArray(b64Images)) {
+      imageUrls = [...b64Images];
+    } else if (image) {
+      imageUrls = [image];
+    }
     if (req.files && req.files.length > 0) {
-      imageUrls = await uploadImages(
+      const uploaded = await uploadImages(
         req.files.map(f => ({ buffer: f.buffer, mimetype: f.mimetype })),
         'communityhub/marketplace'
       );
+      imageUrls = [...imageUrls, ...uploaded];
     }
 
+    // Normalize category
+    let cat = (category || 'other').toString().toLowerCase().trim();
+    const validCats = ['furniture','electronics','appliances','kitchen','computers','vehicles',
+                       'books','sports','kids','decor','clothing','services','other'];
+    if (!validCats.includes(cat)) {
+      cat = 'other';
+    }
+
+    // Normalize condition
+    let cond = 'Good';
+    const rawCond = (condition || '').toString().toUpperCase().replace(/[\s_-]+/g, '');
+    if (rawCond === 'NEW') cond = 'New';
+    else if (rawCond === 'LIKENEW') cond = 'Like New';
+    else if (rawCond === 'USED' || rawCond === 'FAIR' || rawCond === 'POOR') cond = 'Used';
+    else cond = 'Good';
+
     const data = {
-      title, description: description || '',
-      category: category || 'other',
+      title: title || 'Item for Sale',
+      description: description || '',
+      category: cat,
       price: Number(price) || 0,
-      condition: condition || 'Good',
+      condition: cond,
       status: 'Available',
       images: imageUrls,
       seller: req.user?._id,
       sellerName: req.user?.name || '',
-      location: location || '',
+      location: location || (req.user?.villa ? `Villa ${req.user.villa}` : ''),
       community: req.user?.community,
-      contactPhone: contactPhone || '',
+      contactPhone: contactPhone || req.user?.phone || '',
       contactEmail: contactEmail || req.user?.email || '',
     };
 
